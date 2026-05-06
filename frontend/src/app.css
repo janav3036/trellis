@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root{
+  --bg: #1a1714;
+  --surface : #242019;
+  --text-primary: #e8e0d0;
+  --text-secondary: #9a9080;
+  --accent-warm: #c8813a;
+  --accent-cool: #6b8c6b;
+  --data-positive: #7aad7a;
+  --dat-negative: #c47a5a;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
