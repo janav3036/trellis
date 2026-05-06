@@ -18,10 +18,18 @@ def setup_spotify():
     print(url)
     print("(Flask must be running on port 5000)")
 
+def setup_weather():
+    lat = input("Enter latitude: ")
+    lon = input("Enter longitude: ")
+    keyring.set_password("trellis-weather", "lat", lat)
+    keyring.set_password("trellis-weather", "lon", lon)
+    print("Latitude and longitude saved")
+
 def cmd_setup(args):
     handlers = {
         "github": setup_github,
         "spotify": setup_spotify,
+        "weather": setup_weather,
     }
     handlers[args.source]()
 
@@ -30,6 +38,9 @@ def cmd_backfill(args):
     if args.source == "spotify":
         from ingesters.spotify import SpotifyIngester
         count = SpotifyIngester().backfill(since)
+    elif args.source == "weather":
+        from ingesters.weather import WeatherIngester
+        count = WeatherIngester().backfill(since)
     else:
         from ingesters.github import GitHubIngester
         count = GitHubIngester().backfill(since)
@@ -39,8 +50,9 @@ def cmd_backfill(args):
 def cmd_run(args): 
     from ingesters.spotify import SpotifyIngester
     from ingesters.github import GitHubIngester
+    from ingesters.weather import WeatherIngester
 
-    for name, ingester in [("spotify", SpotifyIngester()), ("github", GitHubIngester())]:
+    for name, ingester in [("spotify", SpotifyIngester()), ("github", GitHubIngester()), ("weather", WeatherIngester())]:
         count = ingester.run()
         print(f"{name}: {count} new events")
 
@@ -51,11 +63,11 @@ def main():
     subs.add_parser("run")
 
     p_backfill = subs.add_parser("backfill")
-    p_backfill.add_argument("source", choices=["spotify", "github"])
+    p_backfill.add_argument("source", choices=["spotify", "github", "weather"])
     p_backfill.add_argument("since", help="YYYY-MM-DD")
 
     p_setup = subs.add_parser("setup")
-    p_setup.add_argument("source", choices=["spotify", "github"])
+    p_setup.add_argument("source", choices=["spotify", "github", "weather"])
 
     args = parser.parse_args()
     if not args.command:

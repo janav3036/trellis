@@ -60,8 +60,8 @@ class WeatherIngester(Ingester):
             return self._save(conn, daily)
         
     def backfill(self, start_date: datetime) -> int:
-        start = start_date.date
+        start = start_date.date()
         end = date.today()
         daily = self._fetch_archive(start, end)
-        with get_connection as conn:
+        with get_connection() as conn:
             return self._save(conn, daily)
