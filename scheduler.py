@@ -3,6 +3,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
+from ingesters.calendar import CalendarIngester
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
@@ -33,11 +34,15 @@ def github_nightly():
     count = GitHubIngester().run()
     log.info("github nightly: %d new events", count)
 
-@scheduler.scheduled_job('cron', hour=6, minute=0)
+@scheduler.scheduled_job('cron', hour=13, minute=0)
 def weather_daily():
     count = WeatherIngester().run()
     log.info("weather daily: %d new events", count)
 
+@scheduler.scheduled_job('cron', hour=7, minute=0)
+def calendar_daily():
+    count = CalendarIngester().run()
+    log.info("calendar daily: %d new events", count)
 
 if __name__ == "__main__":
     log.info("scheduler starting")
