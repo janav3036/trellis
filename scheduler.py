@@ -5,9 +5,15 @@ from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
 from ingesters.calendar import CalendarIngester
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+_log_file = open("/Users/janav/Programs/Trellis/scheduler.log", "a", buffering=1)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(message)s",
+    stream=_log_file,
+    force=True,
+)
 log = logging.getLogger(__name__)
-scheduler = BlockingScheduler()
+scheduler = BlockingScheduler(job_defaults={"misfire_grace_time": None})
 
 @scheduler.scheduled_job('cron', hour=13, minute=0)
 def spotify_1pm():

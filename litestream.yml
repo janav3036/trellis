@@ -1,0 +1,7 @@
+dbs:
+  - path: /Users/janav/Programs/Trellis/data/trellis.db
+    replicas:
+      - type: s3
+        bucket: trellis-db-backup
+        path: trellis.db
+        region: ap-south-1
