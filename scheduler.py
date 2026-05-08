@@ -1,58 +1,52 @@
+import sys
 import logging
-from apscheduler.schedulers.blocking import BlockingScheduler
 from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
 from ingesters.calendar import CalendarIngester
 
-_log_file = open("/Users/janav/Programs/Trellis/scheduler.log", "a", buffering=1)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
-    stream=_log_file,
-    force=True,
+    handlers=[logging.FileHandler("/Users/janav/Programs/Trellis/scheduler.log", mode="a")],
 )
 log = logging.getLogger(__name__)
-scheduler = BlockingScheduler(job_defaults={"misfire_grace_time": None})
 
-@scheduler.scheduled_job('cron', hour=13, minute=0)
+
 def spotify_1pm():
-    count = SpotifyIngester().run()
-    log.info("spotify 1pm: %d new events", count)
+    log.info("spotify 1pm: %d new events", SpotifyIngester().run())
 
-@scheduler.scheduled_job('cron', hour=18, minute=0)
 def spotify_6pm():
-    count = SpotifyIngester().run()
-    log.info("spotify 6pm: %d new events", count)
+    log.info("spotify 6pm: %d new events", SpotifyIngester().run())
 
-@scheduler.scheduled_job('cron', hour=23, minute=0)
 def spotify_11pm():
-    count = SpotifyIngester().run()
-    log.info("spotify 11pm: %d new events", count)
+    log.info("spotify 11pm: %d new events", SpotifyIngester().run())
 
-@scheduler.scheduled_job('cron', hour=3, minute=0)
 def spotify_3am():
-    count = SpotifyIngester().run()
-    log.info("spotify 3am: %d new events", count)
+    log.info("spotify 3am: %d new events", SpotifyIngester().run())
 
-@scheduler.scheduled_job('cron', hour=23, minute=0)
 def github_nightly():
-    count = GitHubIngester().run()
-    log.info("github nightly: %d new events", count)
+    log.info("github nightly: %d new events", GitHubIngester().run())
 
-@scheduler.scheduled_job('cron', hour=14, minute=0)
 def weather_daily():
-    count = WeatherIngester().run()
-    log.info("weather daily: %d new events", count)
+    log.info("weather daily: %d new events", WeatherIngester().run())
 
-@scheduler.scheduled_job('cron', hour=13, minute=0)
 def calendar_daily():
-    count = CalendarIngester().run()
-    log.info("calendar daily: %d new events", count)
+    log.info("calendar daily: %d new events", CalendarIngester().run())
+
+
+JOBS = {
+    "spotify_1pm": spotify_1pm,
+    "spotify_6pm": spotify_6pm,
+    "spotify_11pm": spotify_11pm,
+    "spotify_3am": spotify_3am,
+    "github_nightly": github_nightly,
+    "weather_daily": weather_daily,
+    "calendar_daily": calendar_daily,
+}
 
 if __name__ == "__main__":
-    log.info("scheduler starting")
-    try:
-        scheduler.start()
-    except KeyboardInterrupt:
-        log.info("scheduler stopped")
+    if len(sys.argv) != 2 or sys.argv[1] not in JOBS:
+        print(f"Usage: scheduler.py <job>  Jobs: {', '.join(JOBS)}")
+        sys.exit(1)
+    JOBS[sys.argv[1]]()
