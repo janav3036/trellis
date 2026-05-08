@@ -40,12 +40,12 @@ def github_nightly():
     count = GitHubIngester().run()
     log.info("github nightly: %d new events", count)
 
-@scheduler.scheduled_job('cron', hour=13, minute=0)
+@scheduler.scheduled_job('cron', hour=14, minute=0)
 def weather_daily():
     count = WeatherIngester().run()
     log.info("weather daily: %d new events", count)
 
-@scheduler.scheduled_job('cron', hour=7, minute=0)
+@scheduler.scheduled_job('cron', hour=13, minute=0)
 def calendar_daily():
     count = CalendarIngester().run()
     log.info("calendar daily: %d new events", count)

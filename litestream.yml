@@ -5,3 +5,4 @@ dbs:
         bucket: trellis-db-backup
         path: trellis.db
         region: ap-south-1
+        sync-interval: 24h
