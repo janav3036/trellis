@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify, redirect, request
 from storage.db import get_connection
 from ingesters.spotify import SpotifyIngester
+from ingesters.github import GitHubIngester
 import keyring
 import requests as req
 
@@ -109,3 +110,23 @@ def backfill_spotify():
         return jsonify({"error": "date_from required"}), 400
     count = SpotifyIngester().backfill(datetime.fromisoformat(date_from))
     return jsonify({"count": count})
+
+@api_bp.route("/backfill/github", methods=["POST"])
+def backfill_github():
+    date_from = request.json.get("date_from")
+    if not date_from:
+        return jsonify({"error": "date_from required"}), 400
+    count = GitHubIngester().backfill(datetime.fromisoformat(date_from))
+    return jsonify({"count": count})
+
+@api_bp.route("/github/repos")
+def github_repos():
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT json_extract(metadata, '$.repo') as repo, COUNT(*) as commits
+            FROM events
+            WHERE source = 'github' AND event_type = 'commit'
+            GROUP BY repo
+            ORDER BY commits DESC
+        """).fetchall()
+    return jsonify([dict(r) for r in rows])
