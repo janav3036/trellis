@@ -63,6 +63,10 @@ class SpotifyIngester(Ingester):
         )
         resp.raise_for_status()
         new_token = resp.json()["access_token"]
+        try:
+            keyring.delete_password(KEYRING_SERVICE, "access_token")
+        except Exception:
+            pass
         keyring.set_password(KEYRING_SERVICE, "access_token", new_token)
         return new_token
 
