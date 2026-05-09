@@ -5,6 +5,7 @@ from storage.db import get_connection
 from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
+from ingesters.calendar import CalendarIngester
 
 import keyring
 import requests as req
@@ -167,3 +168,11 @@ def weather_forecast():
         for i, day in enumerate(daily["time"])
     ]
     return jsonify(events)
+
+@api_bp.route("/backfill/calendar", methods=["POST"])
+def backfill_calendar():
+    date_from = request.json.get("date_from")
+    if not date_from:
+        return jsonify({"error": "date_from required"}), 400
+    count = CalendarIngester().backfill(datetime.fromisoformat(date_from))
+    return jsonify({"count": count})

@@ -14,20 +14,29 @@ CREDENTIALS_FILE = "credentials.json"
 class CalendarIngester(Ingester):
     def __init__(self):
         super().__init__(str(DB_PATH))
-        self.calendar_id = keyring.get_password(KEYRING_SERVICE, "calendar_id")
         token_json = keyring.get_password(KEYRING_SERVICE, "token_json")
         creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
         self.service = build("calendar", "v3", credentials=creds)
 
     def _fetch_events(self, time_min: datetime, time_max: datetime) -> list:
-        result = self.service.events().list(
-            calendarId = self.calendar_id,
-            timeMin = time_min.isoformat(),
-            timeMax = time_max.isoformat(),
-            singleEvents = True,
-            orderBy = "startTime"
-        ).execute()
-        return result.get("items", [])
+        if time_min.tzinfo is None:
+            time_min = time_min.replace(tzinfo=timezone.utc)
+        if time_max.tzinfo is None:
+            time_max = time_max.replace(tzinfo=timezone.utc)
+        calendars = self.service.calendarList().list().execute().get("items", [])
+        all_events = []
+        for cal in calendars:
+            result = self.service.events().list(
+                calendarId = cal["id"],
+                timeMin = time_min.isoformat(),
+                timeMax = time_max.isoformat(),
+                singleEvents = True,
+                orderBy = "startTime",
+            ).execute()
+            for event in result.get("items", []):
+                event["_calendar_name"] = cal["summary"]
+            all_events.extend(result.get("items", []))
+        return all_events
     
     def _save(self, conn, events: list) -> int:
         count = 0
@@ -51,14 +60,15 @@ class CalendarIngester(Ingester):
                 metadata={
                     "title": event.get("summary", ""),
                     "duration_minutes": duration,
-                    "calendar_name": event.get("organizer", {}).get("displayName", ""),
+                    "calendar_name": event.get("_calendar_name", ""),
                 })
         return count
     
     def run(self) -> int:
         now = datetime.now(timezone.utc)
         time_min = now - timedelta(days=2)
-        events = self._fetch_events(time_min, now)
+        time_max = now + timedelta(days=60)
+        events = self._fetch_events(time_min, time_max)
         with get_connection() as conn:
             return self._save(conn, events)
         
