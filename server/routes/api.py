@@ -4,6 +4,8 @@ from flask import Blueprint, jsonify, redirect, request
 from storage.db import get_connection
 from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
+from ingesters.weather import WeatherIngester
+
 import keyring
 import requests as req
 
@@ -130,3 +132,38 @@ def github_repos():
             ORDER BY commits DESC
         """).fetchall()
     return jsonify([dict(r) for r in rows])
+
+@api_bp.route("/backfill/weather", methods=["POST"])
+def backfill_weather():
+    date_from = request.json.get("date_from")
+    if not date_from:
+        return jsonify({"error": "date_from required" }), 400
+    count  = WeatherIngester().backfill(datetime.fromisoformat(date_from))
+    return jsonify({"count": count})
+
+@api_bp.route("/weather/forecast")
+def weather_forecast():
+    ingester = WeatherIngester()
+    resp = req.get("https://api.open-meteo.com/v1/forecast", params={
+        "latitude": ingester.lat,
+        "longitude": ingester.lon,
+        "forecast_days": 14,
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode,windspeed_10m_max",
+        "timezone": "auto"
+    })
+    resp.raise_for_status()
+    daily = resp.json()["daily"]
+    events = [
+        {
+            "timestamp": f"{day}T12:00:00",
+            "metadata": {
+                "temp_max": daily["temperature_2m_max"][i],
+                "temp_min": daily["temperature_2m_min"][i],
+                "precipitation": daily["precipitation_sum"][i],
+                "weathercode": daily["weathercode"][i],
+                "windspeed_max": daily["windspeed_10m_max"][i]
+            }
+        }
+        for i, day in enumerate(daily["time"])
+    ]
+    return jsonify(events)
