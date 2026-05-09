@@ -14,7 +14,7 @@ KEYRING_SERVICE = "trellis-spotify"
 AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 API_BASE = "https://api.spotify.com/v1"
-SCOPES = "user-read-recently-played"
+SCOPES = "user-read-recently-played user-read-currently-playing playlist-read-private user-library-read"
 REDIRECT_URI = "http://127.0.0.1:5000/api/callback/spotify"
 
 
