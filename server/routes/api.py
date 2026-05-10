@@ -198,3 +198,46 @@ def gym_log():
         )
         return jsonify({"count": cur.rowcount})
 
+@api_bp.route("/people/log", methods=["POST"])
+def people_log():
+    data = request.json
+    date = data.get("date")
+    notes = data.get("notes", "")
+    people = data.get("people", [])
+    if not date or not people: 
+        return jsonify({"error": "date and people required"}), 400
+    timestamp = datetime.fromisoformat(date).replace(tzinfo=timezone.utc)
+    count = 0
+    with get_connection() as conn:
+        for person in people:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+                (timestamp.isoformat(), "people", "meetup", json.dumps({
+                    "name": person.get("name", "").strip(),
+                    "tag": person.get("tag", "Friend"),
+                    "notes": notes,
+                }))
+            )
+            count += cur.rowcount
+    return jsonify({"count": count})
+
+@api_bp.route("/people/summary")
+def people_summary():
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT
+                json_extract(metadata, '$.name') as name,
+                json_extract(metadata, '$.tag') as tag,
+                MAX(timestamp) as last_seen,
+                json_extract((SELECT metadata FROM events e2
+                    WHERE e2.source='people' AND e2.event_type='meetup'
+                    AND json_extract(e2.metadata,'$.name') = json_extract(e1.metadata,'$.name')
+                    ORDER BY e2.timestamp DESC LIMIT 1), '$.notes') as last_notes,
+                COUNT(*) as total_meetups
+            FROM events e1
+            WHERE source='people' AND event_type='meetup'
+              AND json_extract(metadata, '$.name') != ''
+            GROUP BY json_extract(metadata, '$.name')
+            ORDER BY last_seen DESC
+        """).fetchall()
+    return jsonify([dict(r) for r in rows])

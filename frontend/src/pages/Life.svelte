@@ -20,6 +20,15 @@
     let gymNotes = "";
     let gymStatus = "";
 
+    let peopleSummary = [];
+    let peopleEvents = [];
+    let showPeopleForm = false;
+    let meetupDate = isoDate(today);
+    let meetupNotes = "";
+    let meetupPeople = [{ name: "", tag: "Friend" }];
+    let peopleStatus = "";
+    let expandedPerson = null;
+
     const MONTH_NAMES = [
         "January",
         "February",
@@ -151,12 +160,16 @@
         };
     })();
     onMount(async () => {
-        const [calRes, gymRes] = await Promise.all([
+        const [calRes, gymRes, peopleRes, peopleSumRes] = await Promise.all([
             fetch(`/api/events?source=calendar&event_type=event`),
             fetch(`/api/events?source=gym&event_type=session`),
+            fetch(`/api/events?source=people&event_type=meetup`),
+            fetch(`/api/people/summary`),
         ]);
         calendarEvents = await calRes.json();
         gymSessions = await gymRes.json();
+        peopleEvents = await peopleRes.json();
+        peopleSummary = await peopleSumRes.json();
     });
 </script>
 
@@ -577,16 +590,204 @@
     </section>
 
     <section class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">People Log</h2>
-        <div
-            class="max-w-2xl rounded-xl bg-[#242019] border border-dashed border-[#3a3530] px-6 py-8 text-center"
-        >
-            <div class="text-sm font-medium mb-1">No people log yet</div>
-            <div class="text-xs text-[#9a9080]">
-                Relationship timeline and "haven't seen X in N months" alerts —
-                coming soon.
-            </div>
+        <div class="flex items-center gap-4 mb-4">
+            <h2 class="text-xl font-semibold">People Log</h2>
+            <button
+                on:click={() => (showPeopleForm = !showPeopleForm)}
+                class="bg-[#6b9e6b] hover:bg-[#5a8e5a] text-[#1a1714] font-medium px-3 py-1 rounded-lg text-sm"
+                >{showPeopleForm ? "Cancel" : "+ Log meetup"}</button
+            >
+            {#if peopleStatus}
+                <span class="text-sm text-[#9a9080]">{peopleStatus}</span>
+            {/if}
         </div>
+
+        {#if showPeopleForm}
+            <div class="max-w-xl bg-[#242019] rounded-xl p-5 mb-6">
+                <div class="flex flex-col gap-4">
+                    <div class="flex gap-4">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-[#9a9080]">Date</label>
+                            <input
+                                type="date"
+                                bind:value={meetupDate}
+                                class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                            />
+                        </div>
+                        <div class="flex flex-col gap-1 flex-1">
+                            <label class="text-xs text-[#9a9080]">Notes</label>
+                            <input
+                                type="text"
+                                bind:value={meetupNotes}
+                                placeholder="Coffee at Blue Tokai…"
+                                class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        <label class="text-xs text-[#9a9080]">People</label>
+                        {#each meetupPeople as person, i}
+                            <div class="flex gap-2 items-center">
+                                <input
+                                    type="text"
+                                    bind:value={person.name}
+                                    placeholder="Name"
+                                    class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530] flex-1"
+                                />
+                                <select
+                                    bind:value={person.tag}
+                                    class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                                >
+                                    {#each ["Friend", "Family", "Colleague", "Other"] as t}
+                                        <option>{t}</option>
+                                    {/each}
+                                </select>
+                                {#if meetupPeople.length > 1}
+                                    <button
+                                        on:click={() =>
+                                            (meetupPeople = meetupPeople.filter(
+                                                (_, j) => j !== i,
+                                            ))}
+                                        class="text-[#9a9080] hover:text-[#e8e0d0] text-sm px-2"
+                                        >✕</button
+                                    >
+                                {/if}
+                            </div>
+                        {/each}
+                        <button
+                            on:click={() =>
+                                (meetupPeople = [
+                                    ...meetupPeople,
+                                    { name: "", tag: "Friend" },
+                                ])}
+                            class="text-xs text-[#6b9e6b] hover:text-[#8abf8a] self-start"
+                            >+ Add person</button
+                        >
+                    </div>
+
+                    <button
+                        on:click={async () => {
+                            const valid = meetupPeople.filter((p) =>
+                                p.name.trim(),
+                            );
+                            if (!valid.length) return;
+                            peopleStatus = "saving…";
+                            const res = await fetch("/api/people/log", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    date: meetupDate,
+                                    notes: meetupNotes,
+                                    people: valid,
+                                }),
+                            });
+                            const data = await res.json();
+                            peopleStatus = `${data.count} logged`;
+                            const [evRes, sumRes] = await Promise.all([
+                                fetch(
+                                    `/api/events?source=people&event_type=meetup`,
+                                ),
+                                fetch(`/api/people/summary`),
+                            ]);
+                            peopleEvents = await evRes.json();
+                            peopleSummary = await sumRes.json();
+                            meetupPeople = [{ name: "", tag: "Friend" }];
+                            meetupNotes = "";
+                            showPeopleForm = false;
+                        }}
+                        class="bg-[#6b9e6b] hover:bg-[#5a8e5a] text-[#1a1714] font-medium px-4 py-2 rounded-lg text-sm self-start"
+                    >
+                        Save
+                    </button>
+                </div>
+            </div>
+        {/if}
+
+        {#if peopleSummary.length === 0}
+            <p class="text-sm text-[#9a9080]">No meetups logged yet.</p>
+        {:else}
+            <div class="flex flex-col gap-2 max-w-2xl">
+                {#each peopleSummary as person}
+                    {@const days = Math.floor(
+                        (Date.now() - new Date(person.last_seen)) / 86400000,
+                    )}
+                    {@const urgency =
+                        days < 30
+                            ? "text-[#6b9e6b]"
+                            : days < 90
+                              ? "text-[#c8a84b]"
+                              : "text-[#c87a7a]"}
+                    {@const history = peopleEvents.filter(
+                        (e) => e.metadata.name === person.name,
+                    )}
+                    <div class="bg-[#242019] rounded-xl overflow-hidden">
+                        <button
+                            class="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-[#2a2520]"
+                            on:click={() =>
+                                (expandedPerson =
+                                    expandedPerson === person.name
+                                        ? null
+                                        : person.name)}
+                        >
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium"
+                                        >{person.name}</span
+                                    >
+                                    <span
+                                        class="text-xs px-2 py-0.5 rounded-full bg-[#1a1714] text-[#9a9080]"
+                                        >{person.tag}</span
+                                    >
+                                </div>
+                                {#if person.last_notes}
+                                    <div
+                                        class="text-xs text-[#9a9080] mt-0.5 truncate"
+                                    >
+                                        {person.last_notes}
+                                    </div>
+                                {/if}
+                            </div>
+                            <div class="text-right shrink-0">
+                                <div class="text-xs {urgency} font-medium">
+                                    {days === 0 ? "today" : `${days}d ago`}
+                                </div>
+                                <div class="text-xs text-[#9a9080]">
+                                    {person.total_meetups} meetup{person.total_meetups !==
+                                    1
+                                        ? "s"
+                                        : ""}
+                                </div>
+                            </div>
+                        </button>
+                        {#if expandedPerson === person.name}
+                            <div
+                                class="border-t border-[#3a3530] px-4 py-3 flex flex-col gap-2"
+                            >
+                                {#each history as e}
+                                    <div class="flex items-start gap-3">
+                                        <span
+                                            class="text-xs text-[#9a9080] shrink-0 mt-0.5"
+                                        >
+                                            {new Date(
+                                                e.timestamp,
+                                            ).toLocaleDateString("en-US", {
+                                                month: "short",
+                                                day: "numeric",
+                                                year: "numeric",
+                                            })}
+                                        </span>
+                                        <span class="text-xs text-[#c8c0b0]"
+                                            >{e.metadata.notes || "—"}</span
+                                        >
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+                {/each}
+            </div>
+        {/if}
     </section>
 
     <section class="mb-10">
