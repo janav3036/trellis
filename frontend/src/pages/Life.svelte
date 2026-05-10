@@ -10,6 +10,16 @@
     let viewMonth = today.getMonth(); // 0-indexed: 0=Jan, 11=Dec
     let selectedDay = null;
 
+    let gymSessions = [];
+    let showGymForm = false;
+    let gymDate = isoDate(today);
+    let gymType = "workout";
+    let gymMuscles = [];
+    let gymDistance = "";
+    let gymDuration = "";
+    let gymNotes = "";
+    let gymStatus = "";
+
     const MONTH_NAMES = [
         "January",
         "February",
@@ -59,6 +69,11 @@
     }
 
     function timeAgo(ts) {
+        if (new Date(ts) > Date.now()) {
+            const secs = Math.floor((new Date(ts) - Date.now()) / 1000);
+            if (secs < 86400) return `in ${Math.floor(secs / 3600)}h`;
+            return `in ${Math.floor(secs / 86400)}d`;
+        }
         const secs = Math.floor((Date.now() - new Date(ts)) / 1000);
         if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
         if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
@@ -135,10 +150,13 @@
             days: new Set(evs.map((e) => e.timestamp.slice(0, 10))).size,
         };
     })();
-
     onMount(async () => {
-        const res = await fetch(`/api/events?source=calendar&event_type=event`);
-        calendarEvents = await res.json();
+        const [calRes, gymRes] = await Promise.all([
+            fetch(`/api/events?source=calendar&event_type=event`),
+            fetch(`/api/events?source=gym&event_type=session`),
+        ]);
+        calendarEvents = await calRes.json();
+        gymSessions = await gymRes.json();
     });
 </script>
 
@@ -259,9 +277,14 @@
             <div class="mt-4 max-w-4xl bg-[#242019] rounded-xl p-4">
                 <div class="flex items-center justify-between mb-3">
                     <span class="text-sm font-medium">
-                        {new Date(selectedDay + "T12:00:00").toLocaleDateString("en-US", {
-                            weekday: "long", month: "long", day: "numeric",
-                        })}
+                        {new Date(selectedDay + "T12:00:00").toLocaleDateString(
+                            "en-US",
+                            {
+                                weekday: "long",
+                                month: "long",
+                                day: "numeric",
+                            },
+                        )}
                     </span>
                     <button
                         on:click={() => (selectedDay = null)}
@@ -280,16 +303,28 @@
                                 style="background:{color.bg}"
                             >
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-sm font-medium truncate" style="color:{color.text}">
+                                    <div
+                                        class="text-sm font-medium truncate"
+                                        style="color:{color.text}"
+                                    >
                                         {e.metadata.title}
                                     </div>
                                     <div class="text-xs text-[#9a9080] mt-0.5">
-                                        {e.metadata.calendar_name}{#if e.metadata.duration_minutes} · {formatDuration(e.metadata.duration_minutes)}{/if}
+                                        {e.metadata
+                                            .calendar_name}{#if e.metadata.duration_minutes}
+                                            · {formatDuration(
+                                                e.metadata.duration_minutes,
+                                            )}{/if}
                                     </div>
                                 </div>
                                 {#if e.metadata.duration_minutes}
-                                    <span class="text-xs shrink-0" style="color:{color.text}">
-                                        {formatDuration(e.metadata.duration_minutes)}
+                                    <span
+                                        class="text-xs shrink-0"
+                                        style="color:{color.text}"
+                                    >
+                                        {formatDuration(
+                                            e.metadata.duration_minutes,
+                                        )}
                                     </span>
                                 {/if}
                             </div>
@@ -308,31 +343,237 @@
             </p>
         {:else}
             <div class="flex flex-col gap-2 max-w-2xl">
-                {#each calendarEvents.slice(0, 15) as e}
-                    <div class="flex items-center gap-4 px-4 py-3 rounded-lg bg-[#242019]">
+                {#each calendarEvents
+                    .filter((e) => new Date(e.timestamp) <= Date.now())
+                    .slice(0, 15) as e}
+                    <div
+                        class="flex items-center gap-4 px-4 py-3 rounded-lg bg-[#242019]"
+                    >
                         <div class="flex-1 min-w-0">
-                            <div class="text-sm font-medium truncate">{e.metadata.title}</div>
+                            <div class="text-sm font-medium truncate">
+                                {e.metadata.title}
+                            </div>
                             <div class="text-xs text-[#9a9080] mt-0.5">
-                                {e.metadata.calendar_name}{#if e.metadata.duration_minutes} · {formatDuration(e.metadata.duration_minutes)}{/if}
+                                {e.metadata
+                                    .calendar_name}{#if e.metadata.duration_minutes}
+                                    · {formatDuration(
+                                        e.metadata.duration_minutes,
+                                    )}{/if}
                             </div>
                         </div>
-                        <span class="text-xs text-[#9a9080] shrink-0">{timeAgo(e.timestamp)}</span>
+                        <span class="text-xs text-[#9a9080] shrink-0"
+                            >{timeAgo(e.timestamp)}</span
+                        >
                     </div>
                 {/each}
             </div>
         {/if}
     </section>
     <section class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">Gym</h2>
-        <div
-            class="max-w-2xl rounded-xl bg-[#242019] border border-dashed border-[#3a3530] px-6 py-8 text-center"
-        >
-            <div class="text-sm font-medium mb-1">No gym data yet</div>
-            <div class="text-xs text-[#9a9080]">
-                Connect a fitness tracker or log workouts manually to see your
-                gym history.
-            </div>
+        <div class="flex items-center gap-4 mb-4">
+            <h2 class="text-xl font-semibold">Gym</h2>
+            <button
+                on:click={() => (showGymForm = !showGymForm)}
+                class="bg-[#6b9e6b] hover:bg-[#5a8e5a] text-[#1a1714] font-medium px-3 py-1 rounded-lg text-sm"
+            >
+                {showGymForm ? "Cancel" : "+ Log session"}
+            </button>
+            {#if gymStatus}
+                <span class="text-sm text-[#9a9080]">{gymStatus}</span>
+            {/if}
         </div>
+
+        {#if showGymForm}
+            <div class="max-w-xl bg-[#242019] rounded-xl p-5 mb-6">
+                <div class="flex flex-col gap-4">
+                    <div class="flex gap-4">
+                        <div class="flex flex-col gap-1 flex-1">
+                            <label class="text-xs text-[#9a9080]">Date</label>
+                            <input
+                                type="date"
+                                bind:value={gymDate}
+                                class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                            />
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-[#9a9080]">Type</label>
+                            <div class="flex gap-2">
+                                <button
+                                    on:click={() => (gymType = "workout")}
+                                    class="px-3 py-2 rounded-lg text-sm {gymType ===
+                                    'workout'
+                                        ? 'bg-[#6b9e6b] text-[#1a1714]'
+                                        : 'bg-[#1a1714] text-[#9a9080]'}"
+                                >
+                                    Workout
+                                </button>
+                                <button
+                                    on:click={() => (gymType = "run")}
+                                    class="px-3 py-2 rounded-lg text-sm {gymType ===
+                                    'run'
+                                        ? 'bg-[#6b9e6b] text-[#1a1714]'
+                                        : 'bg-[#1a1714] text-[#9a9080]'}"
+                                >
+                                    Run
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {#if gymType === "workout"}
+                        <div class="flex flex-col gap-2">
+                            <label class="text-xs text-[#9a9080]"
+                                >Muscle groups</label
+                            >
+                            <div class="flex flex-wrap gap-2">
+                                {#each ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Legs", "Core", "Calisthenics", "Boxing"] as muscle}
+                                    <button
+                                        on:click={() =>
+                                            (gymMuscles = gymMuscles.includes(
+                                                muscle,
+                                            )
+                                                ? gymMuscles.filter(
+                                                      (m) => m !== muscle,
+                                                  )
+                                                : [...gymMuscles, muscle])}
+                                        class="px-3 py-1 rounded-full text-xs {gymMuscles.includes(
+                                            muscle,
+                                        )
+                                            ? 'bg-[#3d2e1a] text-[#c89a5a]'
+                                            : 'bg-[#1a1714] text-[#9a9080]'}"
+                                    >
+                                        {muscle}
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+                    {:else}
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-[#9a9080]"
+                                >Distance (km)</label
+                            >
+                            <input
+                                type="number"
+                                bind:value={gymDistance}
+                                placeholder="5.0"
+                                step="0.1"
+                                class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530] w-32"
+                            />
+                        </div>
+                    {/if}
+
+                    <div class="flex gap-4">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-[#9a9080]"
+                                >Duration (min)</label
+                            >
+                            <input
+                                type="number"
+                                bind:value={gymDuration}
+                                placeholder="60"
+                                class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530] w-24"
+                            />
+                        </div>
+                        <div class="flex flex-col gap-1 flex-1">
+                            <label class="text-xs text-[#9a9080]">Notes</label>
+                            <input
+                                type="text"
+                                bind:value={gymNotes}
+                                placeholder="Optional"
+                                class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                            />
+                        </div>
+                    </div>
+
+                    <button
+                        on:click={async () => {
+                            gymStatus = "saving…";
+                            const res = await fetch("/api/gym/log", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    date: gymDate,
+                                    type: gymType,
+                                    muscle_groups: gymMuscles,
+                                    distance_km: gymDistance
+                                        ? parseFloat(gymDistance)
+                                        : null,
+                                    duration_minutes: gymDuration
+                                        ? parseInt(gymDuration)
+                                        : null,
+                                    notes: gymNotes,
+                                }),
+                            });
+                            const data = await res.json();
+                            gymStatus = data.count
+                                ? "Saved!"
+                                : "Already logged for this date";
+                            gymSessions = await (
+                                await fetch(
+                                    `/api/events?source=gym&event_type=session`,
+                                )
+                            ).json();
+                            gymMuscles = [];
+                            gymDistance = "";
+                            gymDuration = "";
+                            gymNotes = "";
+                            showGymForm = false;
+                        }}
+                        class="bg-[#6b9e6b] hover:bg-[#5a8e5a] text-[#1a1714] font-medium px-4 py-2 rounded-lg text-sm self-start"
+                    >
+                        Save
+                    </button>
+                </div>
+            </div>
+        {/if}
+
+        {#if gymSessions.length === 0}
+            <p class="text-sm text-[#9a9080]">No sessions logged yet.</p>
+        {:else}
+            <div class="flex flex-col gap-2 max-w-2xl">
+                {#each gymSessions as s}
+                    <div
+                        class="flex items-center gap-4 px-4 py-3 rounded-lg bg-[#242019]"
+                    >
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-sm font-medium capitalize"
+                                    >{s.metadata.type}</span
+                                >
+                                {#each s.metadata.muscle_groups || [] as m}
+                                    <span
+                                        class="text-xs px-2 py-0.5 rounded-full bg-[#3d2e1a] text-[#c89a5a]"
+                                        >{m}</span
+                                    >
+                                {/each}
+                                {#if s.metadata.distance_km}
+                                    <span class="text-xs text-[#9a9080]"
+                                        >{s.metadata.distance_km} km</span
+                                    >
+                                {/if}
+                            </div>
+                            {#if s.metadata.notes}
+                                <div class="text-xs text-[#9a9080] mt-0.5">
+                                    {s.metadata.notes}
+                                </div>
+                            {/if}
+                        </div>
+                        <div class="text-right shrink-0">
+                            {#if s.metadata.duration_minutes}
+                                <div class="text-xs text-[#c89a5a]">
+                                    {formatDuration(
+                                        s.metadata.duration_minutes,
+                                    )}
+                                </div>
+                            {/if}
+                            <div class="text-xs text-[#9a9080]">
+                                {timeAgo(s.timestamp)}
+                            </div>
+                        </div>
+                    </div>
+                {/each}
+            </div>
+        {/if}
     </section>
 
     <section class="mb-10">

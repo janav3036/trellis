@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, jsonify, redirect, request
 from storage.db import get_connection
 from ingesters.spotify import SpotifyIngester
@@ -176,3 +176,25 @@ def backfill_calendar():
         return jsonify({"error": "date_from required"}), 400
     count = CalendarIngester().backfill(datetime.fromisoformat(date_from))
     return jsonify({"count": count})
+
+@api_bp.route("/gym/log", methods=["POST"])
+def gym_log():
+    data = request.json
+    date = data.get("date")
+    if not date:
+        return jsonify({"error": "date required"}), 400
+    timestamp = datetime.fromisoformat(date).replace(tzinfo=timezone.utc)
+    metadata = {
+        "type": data.get("type", "workout"),
+        "muscle_groups": data.get("muscle_groups", []),
+        "distance_km": data.get("distance_km"),
+        "duration_minutes": data.get("duration_minutes"),
+        "notes": data.get("notes", ""),
+    }
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (timestamp.isoformat(), "gym", "session", json.dumps(metadata))
+        )
+        return jsonify({"count": cur.rowcount})
+
