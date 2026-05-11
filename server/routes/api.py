@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, jsonify, redirect, request, Response
 from storage.db import get_connection
 from ingesters.spotify import SpotifyIngester
@@ -221,10 +221,11 @@ def people_log():
     timestamp = datetime.fromisoformat(date).replace(tzinfo=timezone.utc)
     count = 0
     with get_connection() as conn:
-        for person in people:
+        for i, person in enumerate(people):
+            ts = timestamp + timedelta(microseconds=i)
             cur = conn.execute(
                 "INSERT OR IGNORE INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
-                (timestamp.isoformat(), "people", "meetup", json.dumps({
+                    (ts.isoformat(), "people", "meetup", json.dumps({            
                     "name": person.get("name", "").strip(),
                     "tag": person.get("tag", "Friend"),
                     "notes": notes,
