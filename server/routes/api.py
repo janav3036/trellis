@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from flask import Blueprint, jsonify, redirect, request
+from flask import Blueprint, jsonify, redirect, request, Response
 from storage.db import get_connection
 from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
@@ -52,6 +52,17 @@ def spotify_callback():
     SpotifyIngester().exchange_code(code)
     return redirect("/")
 
+def _full_img_url(url):
+    if not url or url.startswith("http"):
+        return url
+    return f"https://i.scdn.co/image/{url}"
+
+def _proxy_url(url):
+    if not url:
+        return None
+    import urllib.parse
+    return f"/api/img?url={urllib.parse.quote(url, safe='')}"
+
 @api_bp.route("/now-playing")
 def now_playing():
     ingester = SpotifyIngester()
@@ -75,7 +86,8 @@ def now_playing():
         "track": item["name"],
         "artist": ", ".join(a["name"] for a in item["artists"]),
         "album": item["album"]["name"],
-        "cover": item["album"]["images"][0]["url"] if item["album"]["images"] else None,
+        "cover": _proxy_url(_full_img_url(item["album"]["images"][0]["url"])) if item["album"]["images"] else None,
+
         "progress_ms": data["progress_ms"],
         "duration_ms": item["duration_ms"],
     })
@@ -99,7 +111,7 @@ def playlists():
         {
             "name": p["name"],
             "id": p["id"],
-            "cover": p["images"][0]["url"] if p["images"] else None,
+            "cover": _proxy_url(_full_img_url(p["images"][0]["url"])) if p["images"] else None,
             "track_count": (p.get("items") or {}).get("total", 0)
         }
         for p in data["items"]
@@ -241,3 +253,13 @@ def people_summary():
             ORDER BY last_seen DESC
         """).fetchall()
     return jsonify([dict(r) for r in rows])
+
+_SPOTIFY_CDN = ("https://i.scdn.co/", "https://mosaic.scdn.co/", "https://image-cdn-ak.spotifycdn.com/", "https://image-cdn-fa.spotifycdn.com/")
+
+@api_bp.route("/img")
+def proxy_image():
+    url = request.args.get("url", "")
+    if not any(url.startswith(p) for p in _SPOTIFY_CDN):
+        return "", 400
+    resp = req.get(url, timeout=5)
+    return Response(resp.content, content_type=resp.headers.get("Content-Type", "image/jpeg"))
