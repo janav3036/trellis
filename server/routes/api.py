@@ -330,3 +330,138 @@ def delete_event(event_id):
     with get_connection() as conn:
         cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
     return jsonify({"deleted": cur.rowcount})
+
+@api_bp.route("/f1/schedule")
+def f1_schedule():
+    resp = req.get("https://api.jolpi.ca/ergast/f1/current.json", timeout = 10)
+    resp.raise_for_status()
+    data = resp.json()["MRData"]["RaceTable"]
+    season = data["season"]
+    today = datetime.now(timezone.utc).date().isoformat()
+    return jsonify({
+        "season": season,
+        "races": [
+            {
+                "round": int(r["round"]),
+                "name": r["raceName"],
+                "circuit": r["Circuit"]["circuitName"],
+                "country": r["Circuit"]["Location"]["country"],
+                "date": r["date"],
+                "completed": r["date"] < today
+            }
+            for r in data["Races"]
+        ] 
+    })
+
+@api_bp.route("/f1/standings")
+def f1_standings():
+    d_resp = req.get("https://api.jolpi.ca/ergast/f1/current/driverStandings.json", timeout=10)
+    d_resp.raise_for_status()
+    c_resp = req.get("https://api.jolpi.ca/ergast/f1/current/constructorStandings.json", timeout=10)
+    c_resp.raise_for_status()
+
+    d_list = d_resp.json()["MRData"]["StandingsTable"]["StandingsLists"]
+    c_list = c_resp.json()["MRData"]["StandingsTable"]["StandingsLists"]
+
+    drivers = [
+        {
+            "position": int(s["position"]),
+            "driver": f"{s['Driver']['givenName']} {s['Driver']['familyName']}",
+            "team": s["Constructors"][0]["name"] if s["Constructors"] else "",
+            "points": float(s["points"]),
+            "wins": int(s["wins"]),
+        }
+        for s in (d_list[0]["DriverStandings"] if d_list else [])
+    ]
+
+    constructors = [
+        {
+            "position": int(s["position"]),
+            "team": s["Constructor"]["name"],
+            "points": float(s["points"]),
+            "wins": int(s["wins"]),
+        }
+        for s in (c_list[0]["ConstructorStandings"] if c_list else [])
+    ]
+
+    return jsonify({"drivers": drivers, "constructors": constructors})
+
+@api_bp.route("/f1/season-arc")
+def f1_season_arc():
+    resp = req.get("https://api.jolpi.ca/ergast/f1/current/results.json?limit=1000", timeout=15)
+    resp.raise_for_status()
+    races = resp.json()["MRData"]["RaceTable"]["Races"]
+
+    race_names = []
+    driver_points = {}
+
+    for race in races:
+        race_names.append(race["raceName"].replace(" Grand Prix", " GP"))
+        for result in race.get("Results", []):
+            name = f"{result['Driver']['givenName']} {result['Driver']['familyName']}"
+            pts = float(result["points"])
+            prev = driver_points.get(name, [])
+            prev_total = prev[-1] if prev else 0
+            while len(prev) < len(race_names) - 1:
+                prev.append(prev[-1] if prev else 0)
+            prev.append(prev_total + pts)
+            driver_points[name] = prev
+
+    final = {d: pts[-1] for d, pts in driver_points.items()}
+    top5 = sorted(final, key=final.get, reverse=True)[:5]
+
+    return jsonify({
+        "races": race_names,
+        "drivers": {d: driver_points[d] for d in top5}
+    })
+
+@api_bp.route("/f1/news")
+def f1_news():
+    import feedparser
+    feeds = [
+        ("https://www.autosport.com/rss/f1/news/", "Autosport"),
+        ("https://www.racefans.net/feed/", "RaceFans"),
+    ]
+    items = []
+    for url, source in feeds:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:8]:
+                pub = entry.get("published_parsed")
+                items.append({
+                    "title": entry.get("title", ""),
+                    "link": entry.get("link", ""),
+                    "published": f"{pub.tm_year}-{pub.tm_mon:02d}-{pub.tm_mday:02d}" if pub else "",
+                    "source": source,
+                })
+        except Exception:
+            continue
+    return jsonify(items[:15])
+
+@api_bp.route("/f1/race-results/<int:round>")
+def f1_race_results(round):
+    resp = req.get(
+        f"https://api.jolpi.ca/ergast/f1/current/{round}/results.json",
+        timeout=10
+    )
+    resp.raise_for_status()
+    races = resp.json()["MRData"]["RaceTable"]["Races"]
+    if not races:
+        return jsonify(None)
+    race = races[0]
+    return jsonify({
+        "name": race["raceName"],
+        "date": race["date"],
+        "circuit": race["Circuit"]["circuitName"],
+        "results": [
+            {
+                "position": int(r["position"]),
+                "driver": f"{r['Driver']['givenName']} {r['Driver']['familyName']}",
+                "team": r["Constructor"]["name"],
+                "points": float(r["points"]),
+                "status": r["status"],
+                "fastest_lap": r.get("FastestLap", {}).get("rank") == "1",
+            }
+            for r in race.get("Results", [])
+        ]
+    })
