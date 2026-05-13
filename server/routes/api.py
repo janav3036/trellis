@@ -255,12 +255,78 @@ def people_summary():
         """).fetchall()
     return jsonify([dict(r) for r in rows])
 
-_SPOTIFY_CDN = ("https://i.scdn.co/", "https://mosaic.scdn.co/", "https://image-cdn-ak.spotifycdn.com/", "https://image-cdn-fa.spotifycdn.com/")
+_ALLOWED_IMG_CDNS = (
+    "https://i.scdn.co/",
+    "https://mosaic.scdn.co/",
+    "https://image-cdn-ak.spotifycdn.com/",
+    "https://image-cdn-fa.spotifycdn.com/",
+    "https://image.tmdb.org/",
+)
 
 @api_bp.route("/img")
 def proxy_image():
     url = request.args.get("url", "")
-    if not any(url.startswith(p) for p in _SPOTIFY_CDN):
+    if not any(url.startswith(p) for p in _ALLOWED_IMG_CDNS):
         return "", 400
     resp = req.get(url, timeout=5)
     return Response(resp.content, content_type=resp.headers.get("Content-Type", "image/jpeg"))
+
+@api_bp.route("/movies/search")
+def movies_search():
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify([])
+    api_key = keyring.get_password("trellis-tmdb", "api_key")
+    resp = req.get("https://api.themoviedb.org/3/search/movie", params ={
+        "api_key": api_key,
+        "query": query,
+    })
+    resp.raise_for_status()
+    results = resp.json().get("results", [])[:8]
+    return jsonify([
+        {
+            "tmdb_id": r["id"],
+            "title": r["title"],
+            "year": r.get("release_date", "")[:4],
+            "poster_path": r.get("poster_path"),
+            "genre_ids": r.get("genre_ids", []),
+            "overview": r.get("overview", ""),
+        }
+        for r in results
+    ])
+
+@api_bp.route("/movies/log", methods=["POST"])
+def movies_log():
+    data = request.json
+    date = data.get("date")
+    title = data.get("title", "").strip()
+    if not date or not title:
+        return jsonify({"error": "date and title required"}), 400
+    now = datetime.now(timezone.utc)
+    timestamp = datetime.fromisoformat(date).replace(
+        tzinfo=timezone.utc,
+        hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond
+    )
+    metadata = {
+        "title": title,
+        "tmdb_id": data.get("tmdb_id"),
+        "year": data.get("year"),
+        "poster_path": data.get("poster_path"),
+        "genres": data.get("genres", []),
+        "rating": data.get("rating"),
+        "notes": data.get("notes", ""),
+        "overview": data.get("overview", ""),
+    }
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (timestamp.isoformat(), "movies", "watch", json.dumps(metadata))
+        )
+    return jsonify({"count": cur.rowcount})
+
+
+@api_bp.route("/events/<int:event_id>", methods=["DELETE"])
+def delete_event(event_id):
+    with get_connection() as conn:
+        cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    return jsonify({"deleted": cur.rowcount})

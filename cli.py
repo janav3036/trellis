@@ -40,12 +40,18 @@ def setup_calendar():
     keyring.set_password("trellis-calendar", "calendar_id", calendar_id)
     print("Calendar credentials saved")
 
+def setup_tmdb():
+    api_key = input("TMDB API Key (v3): ").strip()
+    keyring.set_password("trellis-tmdb", "api_key", api_key)
+    print("TMDB API key saved")
+
 def cmd_setup(args):
     handlers = {
         "github": setup_github,
         "spotify": setup_spotify,
         "weather": setup_weather,
         "calendar": setup_calendar,
+        "tmdb": setup_tmdb,
     }
     handlers[args.source]()
 
@@ -91,7 +97,7 @@ def main():
     p_backfill.add_argument("since", help="YYYY-MM-DD")
 
     p_setup = subs.add_parser("setup")
-    p_setup.add_argument("source", choices=["spotify", "github", "weather", "calendar"])
+    p_setup.add_argument("source", choices=["spotify", "github", "weather", "calendar", "tmdb"])
 
     args = parser.parse_args()
     if not args.command:

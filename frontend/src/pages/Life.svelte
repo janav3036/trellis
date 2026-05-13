@@ -1,5 +1,6 @@
 <script>
     import { onMount } from "svelte";
+    import { blur } from "svelte/transition";
 
     let calendarEvents = [];
     let backfillDate = "";
@@ -28,6 +29,7 @@
     let meetupPeople = [{ name: "", tag: "Friend" }];
     let peopleStatus = "";
     let expandedPerson = null;
+    let peopleView = "people";
 
     const MONTH_NAMES = [
         "January",
@@ -55,6 +57,40 @@
         "Test & ICAs": { bg: "#1a2e2e", text: "#5abfbf" },
     };
     const DEFAULT_COLOR = { bg: "#2a2a2a", text: "#9a9080" };
+
+    const TMDB_GENRES = {
+        28: "Action",
+        12: "Adventure",
+        16: "Animation",
+        35: "Comedy",
+        80: "Crime",
+        99: "Documentary",
+        18: "Drama",
+        10751: "Family",
+        14: "Fantasy",
+        36: "History",
+        27: "Horror",
+        10402: "Music",
+        9648: "Mystery",
+        10749: "Romance",
+        878: "Sci-Fi",
+        53: "Thriller",
+        10752: "War",
+        37: "Western",
+    };
+
+    let movies = [];
+    let showMovieForm = false;
+    let movieDate = isoDate(today);
+    let movieQuery = "";
+    let movieResults = [];
+    let selectedMovie = null;
+    let movieRating = null;
+    let movieNotes = "";
+    let movieStatus = "";
+    let searchTimeout = null;
+    let expandedMovie = null;
+    let selectedGenres = new Set();
 
     function calColor(name) {
         return CAL_COLORS[name] || DEFAULT_COLOR;
@@ -159,17 +195,44 @@
             days: new Set(evs.map((e) => e.timestamp.slice(0, 10))).size,
         };
     })();
+
+    $: meetupsByDate = (() => {
+        const map = {};
+        for (const e of peopleEvents) {
+            const key = e.timestamp.slice(0, 10);
+            if (!map[key]) map[key] = [];
+            map[key].push(e);
+        }
+        return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
+    })();
+
+    $: availableGenres = [
+        ...new Set(movies.flatMap((m) => m.metadata.genres || [])),
+    ].filter((id) => TMDB_GENRES[id]);
+
+    $: filteredMovies =
+        selectedGenres.size == 0
+            ? movies
+            : movies.filter((m) =>
+                  (m.metadata.genres || []).some((id) =>
+                      selectedGenres.has(id),
+                  ),
+              );
+
     onMount(async () => {
-        const [calRes, gymRes, peopleRes, peopleSumRes] = await Promise.all([
-            fetch(`/api/events?source=calendar&event_type=event`),
-            fetch(`/api/events?source=gym&event_type=session`),
-            fetch(`/api/events?source=people&event_type=meetup`),
-            fetch(`/api/people/summary`),
-        ]);
+        const [calRes, gymRes, peopleRes, peopleSumRes, moviesRes] =
+            await Promise.all([
+                fetch(`/api/events?source=calendar&event_type=event`),
+                fetch(`/api/events?source=gym&event_type=session`),
+                fetch(`/api/events?source=people&event_type=meetup`),
+                fetch(`/api/people/summary`),
+                fetch(`/api/events?source=movies&event_type=watch`),
+            ]);
         calendarEvents = await calRes.json();
         gymSessions = await gymRes.json();
         peopleEvents = await peopleRes.json();
         peopleSummary = await peopleSumRes.json();
+        movies = await moviesRes.json();
     });
 </script>
 
@@ -597,6 +660,21 @@
                 class="bg-[#6b9e6b] hover:bg-[#5a8e5a] text-[#1a1714] font-medium px-3 py-1 rounded-lg text-sm"
                 >{showPeopleForm ? "Cancel" : "+ Log meetup"}</button
             >
+
+            <div class="flex gap-1 ml-2">
+                <button
+                    on:click={() => (peopleView = "people")}
+                    class="px-3 py-1 rounded-lg text-sm {peopleView === 'people'
+                        ? 'bg-[#3a3530] text-[#e8e0d0]'
+                        : 'text-[#9a9080] hover:text-[#e8e0d0]'}">People</button
+                >
+                <button
+                    on:click={() => (peopleView = "events")}
+                    class="px-3 py-1 rounded-lg text-sm {peopleView === 'events'
+                        ? 'bg-[#3a3530] text-[#e8e0d0]'
+                        : 'text-[#9a9080] hover:text-[#e8e0d0]'}">Events</button
+                >
+            </div>
             {#if peopleStatus}
                 <span class="text-sm text-[#9a9080]">{peopleStatus}</span>
             {/if}
@@ -704,86 +782,151 @@
             </div>
         {/if}
 
-        {#if peopleSummary.length === 0}
+        {#if peopleView === "people"}
+            {#if peopleSummary.length === 0}
+                <p class="text-sm text-[#9a9080]">No meetups logged yet.</p>
+            {:else}
+                <div class="flex flex-col gap-2 max-w-2xl">
+                    {#each peopleSummary as person}
+                        {@const days = Math.floor(
+                            (Date.now() - new Date(person.last_seen)) /
+                                86400000,
+                        )}
+                        {@const urgency =
+                            days < 30
+                                ? "text-[#6b9e6b]"
+                                : days < 90
+                                  ? "text-[#c8a84b]"
+                                  : "text-[#c87a7a]"}
+                        {@const history = peopleEvents.filter(
+                            (e) => e.metadata.name === person.name,
+                        )}
+                        <div class="bg-[#242019] rounded-xl overflow-hidden">
+                            <button
+                                class="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-[#2a2520]"
+                                on:click={() =>
+                                    (expandedPerson =
+                                        expandedPerson === person.name
+                                            ? null
+                                            : person.name)}
+                            >
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium"
+                                            >{person.name}</span
+                                        >
+                                        <span
+                                            class="text-xs px-2 py-0.5 rounded-full bg-[#1a1714] text-[#9a9080]"
+                                            >{person.tag}</span
+                                        >
+                                    </div>
+                                    {#if person.last_notes}
+                                        <div
+                                            class="text-xs text-[#9a9080] mt-0.5 truncate"
+                                        >
+                                            {person.last_notes}
+                                        </div>
+                                    {/if}
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <div class="text-xs {urgency} font-medium">
+                                        {days === 0 ? "today" : `${days}d ago`}
+                                    </div>
+                                    <div class="text-xs text-[#9a9080]">
+                                        {person.total_meetups} meetup{person.total_meetups !==
+                                        1
+                                            ? "s"
+                                            : ""}
+                                    </div>
+                                </div>
+                            </button>
+                            {#if expandedPerson === person.name}
+                                <div
+                                    class="border-t border-[#3a3530] px-4 py-3 flex flex-col gap-2"
+                                >
+                                    {#each history as e}
+                                        <div class="flex items-start gap-3">
+                                            <span
+                                                class="text-xs text-[#9a9080] shrink-0 mt-0.5"
+                                            >
+                                                {new Date(
+                                                    e.timestamp,
+                                                ).toLocaleDateString("en-US", {
+                                                    month: "short",
+                                                    day: "numeric",
+                                                    year: "numeric",
+                                                })}
+                                            </span>
+                                            <span class="text-xs text-[#c8c0b0]"
+                                                >{e.metadata.notes || "—"}</span
+                                            >
+                                            <button
+                                                on:click={async () => {
+                                                    await fetch(
+                                                        `/api/events/${e.id}`,
+                                                        { method: "DELETE" },
+                                                    );
+                                                    const [evRes, sumRes] =
+                                                        await Promise.all([
+                                                            fetch(
+                                                                `/api/events?source=people&event_type=meetup`,
+                                                            ),
+                                                            fetch(
+                                                                `/api/people/summary`,
+                                                            ),
+                                                        ]);
+                                                    peopleEvents =
+                                                        await evRes.json();
+                                                    peopleSummary =
+                                                        await sumRes.json();
+                                                }}
+                                                class="ml-auto text-xs text-[#c87a7a] hover:text-[#e87a7a] shrink-0"
+                                                >✕</button
+                                            >
+                                        </div>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+        {:else if meetupsByDate.length === 0}
             <p class="text-sm text-[#9a9080]">No meetups logged yet.</p>
         {:else}
-            <div class="flex flex-col gap-2 max-w-2xl">
-                {#each peopleSummary as person}
-                    {@const days = Math.floor(
-                        (Date.now() - new Date(person.last_seen)) / 86400000,
-                    )}
-                    {@const urgency =
-                        days < 30
-                            ? "text-[#6b9e6b]"
-                            : days < 90
-                              ? "text-[#c8a84b]"
-                              : "text-[#c87a7a]"}
-                    {@const history = peopleEvents.filter(
-                        (e) => e.metadata.name === person.name,
-                    )}
-                    <div class="bg-[#242019] rounded-xl overflow-hidden">
-                        <button
-                            class="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-[#2a2520]"
-                            on:click={() =>
-                                (expandedPerson =
-                                    expandedPerson === person.name
-                                        ? null
-                                        : person.name)}
-                        >
-                            <div class="flex-1 min-w-0">
+            <div class="flex flex-col gap-3 max-w-2xl">
+                {#each meetupsByDate as [date, events]}
+                    <div class="bg-[#242019] rounded-xl px-4 py-3">
+                        <div class="text-xs text-[#9a9080] mb-2">
+                            {new Date(date + "T12:00:00").toLocaleDateString(
+                                "en-US",
+                                {
+                                    weekday: "long",
+                                    month: "long",
+                                    day: "numeric",
+                                    year: "numeric",
+                                },
+                            )}
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            {#each events as e}
                                 <div class="flex items-center gap-2">
-                                    <span class="text-sm font-medium"
-                                        >{person.name}</span
+                                    <span class="text-sm"
+                                        >{e.metadata.name}</span
                                     >
                                     <span
                                         class="text-xs px-2 py-0.5 rounded-full bg-[#1a1714] text-[#9a9080]"
-                                        >{person.tag}</span
+                                        >{e.metadata.tag}</span
                                     >
-                                </div>
-                                {#if person.last_notes}
-                                    <div
-                                        class="text-xs text-[#9a9080] mt-0.5 truncate"
-                                    >
-                                        {person.last_notes}
-                                    </div>
-                                {/if}
-                            </div>
-                            <div class="text-right shrink-0">
-                                <div class="text-xs {urgency} font-medium">
-                                    {days === 0 ? "today" : `${days}d ago`}
-                                </div>
-                                <div class="text-xs text-[#9a9080]">
-                                    {person.total_meetups} meetup{person.total_meetups !==
-                                    1
-                                        ? "s"
-                                        : ""}
-                                </div>
-                            </div>
-                        </button>
-                        {#if expandedPerson === person.name}
-                            <div
-                                class="border-t border-[#3a3530] px-4 py-3 flex flex-col gap-2"
-                            >
-                                {#each history as e}
-                                    <div class="flex items-start gap-3">
+                                    {#if e.metadata.notes}
                                         <span
-                                            class="text-xs text-[#9a9080] shrink-0 mt-0.5"
+                                            class="text-xs text-[#9a9080] truncate"
+                                            >{e.metadata.notes}</span
                                         >
-                                            {new Date(
-                                                e.timestamp,
-                                            ).toLocaleDateString("en-US", {
-                                                month: "short",
-                                                day: "numeric",
-                                                year: "numeric",
-                                            })}
-                                        </span>
-                                        <span class="text-xs text-[#c8c0b0]"
-                                            >{e.metadata.notes || "—"}</span
-                                        >
-                                    </div>
-                                {/each}
-                            </div>
-                        {/if}
+                                    {/if}
+                                </div>
+                            {/each}
+                        </div>
                     </div>
                 {/each}
             </div>
@@ -791,15 +934,327 @@
     </section>
 
     <section class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">Movie Diary</h2>
+        <div class="flex items-center gap-4 mb-4">
+            <h2 class="text-xl font-semibold">Movie Diary</h2>
+            <button
+                on:click={() => (showMovieForm = !showMovieForm)}
+                class="bg-[#6b9e6b] hover:bg-[#5a8e5a] text-[#1a1714] font-medium px-3 py-1 rounded-lg text-sm"
+                >{showMovieForm ? "Cancel" : "+ Log movie"}</button
+            >
+            {#if movieStatus}
+                <span class="text-sm text-[#9a9080]">{movieStatus}</span>
+            {/if}
+        </div>
+
+        {#if showMovieForm}
+            <div class="max-w-xl bg-[#242019] rounded-xl p-5 mb-6">
+                <div class="flex flex-col gap-4">
+                    <div class="flex gap-4">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-[#9a9080]"
+                                >Date watched</label
+                            >
+                            <input
+                                type="date"
+                                bind:value={movieDate}
+                                class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                            />
+                        </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs text-[#9a9080]">Rating</label>
+                            <div class="flex gap-1 mt-1">
+                                {#each [1, 2, 3, 4, 5] as n}
+                                    <button
+                                        on:click={() =>
+                                            (movieRating =
+                                                movieRating === n ? null : n)}
+                                        class="text-lg {movieRating >= n
+                                            ? 'text-[#c8a84b]'
+                                            : 'text-[#3a3530]'}">★</button
+                                    >
+                                {/each}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-1 relative">
+                        <label class="text-xs text-[#9a9080]"
+                            >Search movie</label
+                        >
+                        <input
+                            type="text"
+                            bind:value={movieQuery}
+                            on:input={() => {
+                                clearTimeout(searchTimeout);
+                                selectedMovie = null;
+                                if (movieQuery.length < 2) {
+                                    movieResults = [];
+                                    return;
+                                }
+                                searchTimeout = setTimeout(async () => {
+                                    const res = await fetch(
+                                        `/api/movies/search?q=${encodeURIComponent(movieQuery)}`,
+                                    );
+                                    movieResults = await res.json();
+                                }, 300);
+                            }}
+                            placeholder="Start typing a title…"
+                            class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                        />
+                        {#if movieResults.length > 0 && !selectedMovie}
+                            <div
+                                class="absolute top-full left-0 right-0 mt-1 bg-[#2a2520] rounded-lg border border-[#3a3530] z-10 overflow-hidden"
+                            >
+                                {#each movieResults as r}
+                                    <button
+                                        class="w-full flex items-center gap-3 px-3 py-2 hover:bg-[#342f28] text-left"
+                                        on:click={() => {
+                                            selectedMovie = r;
+                                            movieQuery = r.title;
+                                            movieResults = [];
+                                        }}
+                                    >
+                                        {#if r.poster_path}
+                                            <img
+                                                src="/api/img?url={encodeURIComponent(
+                                                    'https://image.tmdb.org/t/p/w92' +
+                                                        r.poster_path,
+                                                )}"
+                                                alt={r.title}
+                                                class="w-8 h-12 object-cover rounded"
+                                            />
+                                        {:else}
+                                            <div
+                                                class="w-8 h-12 bg-[#1a1714] rounded"
+                                            />
+                                        {/if}
+                                        <div>
+                                            <div class="text-sm text-[#e8e0d0]">
+                                                {r.title}
+                                            </div>
+                                            <div class="text-xs text-[#9a9080]">
+                                                {r.year}
+                                            </div>
+                                        </div>
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-xs text-[#9a9080]">Notes</label>
+                        <input
+                            type="text"
+                            bind:value={movieNotes}
+                            placeholder="Optional"
+                            class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+                        />
+                    </div>
+
+                    <button
+                        on:click={async () => {
+                            if (!selectedMovie) {
+                                movieStatus =
+                                    "Pick a movie from the search results";
+                                return;
+                            }
+                            movieStatus = "saving…";
+                            const res = await fetch("/api/movies/log", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    date: movieDate,
+                                    title: selectedMovie.title,
+                                    tmdb_id: selectedMovie.tmdb_id,
+                                    year: selectedMovie.year,
+                                    poster_path: selectedMovie.poster_path,
+                                    genres: selectedMovie.genre_ids,
+                                    rating: movieRating,
+                                    notes: movieNotes,
+                                    overview: selectedMovie.overview,
+                                }),
+                            });
+                            const data = await res.json();
+                            movieStatus = data.count
+                                ? "Saved!"
+                                : "Error saving";
+                            movies = await (
+                                await fetch(
+                                    `/api/events?source=movies&event_type=watch`,
+                                )
+                            ).json();
+                            movieQuery = "";
+                            selectedMovie = null;
+                            movieRating = null;
+                            movieNotes = "";
+                            showMovieForm = false;
+                        }}
+                        class="bg-[#6b9e6b] hover:bg-[#5a8e5a] text-[#1a1714] font-medium px-4 py-2 rounded-lg text-sm self-start"
+                        >Save</button
+                    >
+                </div>
+            </div>
+        {/if}
+        {#if availableGenres.length > 0}
+            <div class="flex flex-wrap gap-2 mb-4 max-w-2xl">
+                {#each availableGenres as id}
+                    <button
+                        on:click={() => {
+                            if (selectedGenres.has(id)) {
+                                selectedGenres.delete(id);
+                            } else {
+                                selectedGenres.add(id);
+                            }
+                            selectedGenres = selectedGenres;
+                        }}
+                        class="px-3 py-1 rounded-full text-xs {selectedGenres.has(
+                            id,
+                        )
+                            ? 'bg-[#3d2e1a] text-[#c89a5a]'
+                            : 'bg-[#242019] text-[#9a9080] hover:text-[#e8e0d0]'}"
+                        >{TMDB_GENRES[id]}</button
+                    >
+                {/each}
+            </div>
+        {/if}
+
+        {#if filteredMovies.length === 0}
+            <p class="text-sm text-[#9a9080]">No movies logged yet.</p>
+        {:else}
+            <div class="grid grid-cols-4 gap-3 max-w-2xl">
+                {#each filteredMovies as m}
+                    <button
+                        class="flex flex-col gap-1 text-left"
+                        title="{m.metadata.title} ({m.metadata.year})"
+                        on:click={() => (expandedMovie = m)}
+                    >
+                        {#if m.metadata.poster_path}
+                            <img
+                                src="/api/img?url={encodeURIComponent(
+                                    'https://image.tmdb.org/t/p/w342' +
+                                        m.metadata.poster_path,
+                                )}"
+                                alt={m.metadata.title}
+                                class="rounded-lg w-full aspect-[2/3] object-cover"
+                            />
+                        {:else}
+                            <div
+                                class="rounded-lg w-full aspect-[2/3] bg-[#242019] flex items-center justify-center text-xs text-[#9a9080] text-center p-2"
+                            >
+                                {m.metadata.title}
+                            </div>
+                        {/if}
+                        <div class="text-xs text-[#e8e0d0] truncate">
+                            {m.metadata.title}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            {#if m.metadata.rating}
+                                <span class="text-xs text-[#c8a84b]"
+                                    >{"★".repeat(m.metadata.rating)}</span
+                                >
+                            {/if}
+                            <span class="text-xs text-[#9a9080]"
+                                >{m.metadata.year}</span
+                            >
+                        </div>
+                    </button>
+                {/each}
+            </div>
+        {/if}
+    </section>
+    {#if expandedMovie}
         <div
-            class="max-w-2xl rounded-xl bg-[#242019] border border-dashed border-[#3a3530] px-6 py-8 text-center"
+            class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-8"
+            on:click={() => (expandedMovie = null)}
         >
-            <div class="text-sm font-medium mb-1">No movies logged yet</div>
-            <div class="text-xs text-[#9a9080]">
-                Poster-grid timeline filterable by genre and mood — coming when
-                the Letterboxd ingester is ready.
+            <div
+                class="bg-[#242019] rounded-2xl overflow-hidden max-w-2xl w-full flex gap-0 shadow-2xl"
+                on:click|stopPropagation
+            >
+                {#if expandedMovie.metadata.poster_path}
+                    <img
+                        src="/api/img?url={encodeURIComponent(
+                            'https://image.tmdb.org/t/p/w342' +
+                                expandedMovie.metadata.poster_path,
+                        )}"
+                        alt={expandedMovie.metadata.title}
+                        class="w-48 shrink-0 object-cover"
+                    />
+                {:else}
+                    <div class="w-48 shrink-0 bg-[#1a1714]" />
+                {/if}
+                <div class="flex flex-col gap-3 p-6 flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <div class="text-lg font-semibold">
+                                {expandedMovie.metadata.title}
+                            </div>
+                            <div class="text-sm text-[#9a9080]">
+                                {expandedMovie.metadata.year}
+                            </div>
+                        </div>
+                        <button
+                            on:click={() => (expandedMovie = null)}
+                            class="text-[#9a9080] hover:text-[#e8e0d0] shrink-0"
+                            >✕</button
+                        >
+                    </div>
+                    {#if expandedMovie.metadata.rating}
+                        <div class="text-[#c8a84b] text-xl">
+                            {"★".repeat(
+                                expandedMovie.metadata.rating,
+                            )}{"☆".repeat(5 - expandedMovie.metadata.rating)}
+                        </div>
+                    {/if}
+                    <div class="text-xs text-[#9a9080]">
+                        Watched {new Date(
+                            expandedMovie.timestamp,
+                        ).toLocaleDateString("en-US", {
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                        })}
+                    </div>
+                    {#if expandedMovie.metadata.genres?.length}
+                        <div class="flex flex-wrap gap-1">
+                            {#each expandedMovie.metadata.genres as id}
+                                {#if TMDB_GENRES[id]}
+                                    <span
+                                        class="text-xs px-2 py-0.5 rounded-full bg-[#1a1714] text-[#9a9080]"
+                                        >{TMDB_GENRES[id]}</span
+                                    >
+                                {/if}
+                            {/each}
+                        </div>
+                    {/if}
+                    {#if expandedMovie.metadata.overview}
+                        <p class="text-xs text-[#9a9080] leading-relaxed">
+                            {expandedMovie.metadata.overview}
+                        </p>
+                    {/if}
+                    {#if expandedMovie.metadata.notes}
+                        <p class="text-sm text-[#c8c0b0]">
+                            {expandedMovie.metadata.notes}
+                        </p>
+                    {/if}
+                    <button
+                        on:click={async () => {
+                            await fetch(`/api/events/${expandedMovie.id}`, {
+                                method: "DELETE",
+                            });
+                            movies = await (
+                                await fetch(
+                                    `/api/events?source=movies&event_type=watch`,
+                                )
+                            ).json();
+                            expandedMovie = null;
+                        }}
+                        class="mt-auto text-xs text-[#c87a7a] hover:text-[#e87a7a] self-start"
+                        >Delete</button
+                    >
+                </div>
             </div>
         </div>
-    </section>
+    {/if}
 </main>
