@@ -1,7 +1,9 @@
 import json
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, jsonify, redirect, request, Response
+from plotly import data
 from storage.db import get_connection
+import yfinance as yf
 from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
@@ -464,4 +466,63 @@ def f1_race_results(round):
             }
             for r in race.get("Results", [])
         ]
+    })
+
+@api_bp.route("/market/heartbeat")
+def market_heartbeat():
+    tickers = {
+        "S&P 500": "^GSPC",
+        "Nikkei": "^N225",
+        "DAX": "^GDAXI",
+        "FTSE": "^FTSE",
+    }
+
+    result = {}
+    for name, symbol in tickers.items():
+        hist = yf.Ticker(symbol).history(period="30d", interval = "1d")
+        closes = hist["Close"].tolist()
+        dates = [d.strftime("%Y-%m-%d") for d in hist.index]
+        if closes: 
+            base = closes[0]
+            result[name] = {
+                "pct": [(c-base)/base*100 for c in closes],
+                "dates": dates,
+            }
+    return jsonify(result)
+
+@api_bp.route("/market/fear-greed")
+def market_fear_greed():
+    hist = yf.Ticker("^VIX").history(period="5d", interval="1d")
+    vix = hist["Close"].iloc[-1]
+    score = max(0, min(100, 100 - (vix - 10) / 30 * 100))
+    return jsonify({"vix": round(vix, 2), "score": round(score, 1)})
+
+
+@api_bp.route("/market/sector-rotation")
+def market_sector_rotation():
+    sectors = {
+        "Tech": "XLK", "Energy": "XLE", "Health": "XLV",
+        "Finance": "XLF", "Industrial": "XLI", "Comms": "XLC",
+        "Consumer Disc": "XLY", "Consumer Stap": "XLP",
+        "Utilities": "XLU", "Real Estate": "XLRE", "Materials": "XLB",
+    }
+    result = {}
+
+    for name, symbol in sectors.items():
+        data = yf.download(symbol, period="30d", interval="1d", progress=False, auto_adjust=True)
+        closes = data["Close"].squeeze().tolist()
+        if len(closes) >=2:
+            result[name] = round((closes[-1]-closes[0])/closes[0]*100,2)
+    return jsonify(result)
+
+@api_bp.route("/market/crypto")
+def market_crypto():
+    resp = req.get("https://api.coingecko.com/api/v3/global", timeout=10)
+    resp.raise_for_status()
+    data = resp.json()["data"]
+    dominance = data["market_cap_percentage"]
+    return jsonify({
+        "btc": round(dominance.get("btc", 0), 1),
+        "eth": round(dominance.get("eth", 0), 1),
+        "other": round(100 - dominance.get("btc", 0) - dominance.get("eth", 0), 1),
     })
