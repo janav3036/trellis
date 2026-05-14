@@ -526,3 +526,217 @@ def market_crypto():
         "eth": round(dominance.get("eth", 0), 1),
         "other": round(100 - dominance.get("btc", 0) - dominance.get("eth", 0), 1),
     })
+
+_BRIGHT_STARS = [
+    # (name, RA_hours, Dec_deg, Vmag, spectral_letter)
+    ("Sirius",          6.7525, -16.7161, -1.46, "A"),
+    ("Canopus",         6.3992, -52.6957, -0.72, "A"),
+    ("Rigil Kentaurus", 14.660, -60.8333, -0.27, "G"),
+    ("Arcturus",        14.2612, 19.1822, -0.04, "K"),
+    ("Vega",            18.6157, 38.7836,  0.03, "A"),
+    ("Capella",          5.2788, 45.9980,  0.08, "G"),
+    ("Rigel",            5.2422, -8.2017,  0.12, "B"),
+    ("Procyon",          7.6552,  5.2250,  0.38, "F"),
+    ("Achernar",         1.6286,-57.2368,  0.46, "B"),
+    ("Betelgeuse",       5.9195,  7.4070,  0.50, "M"),
+    ("Hadar",           14.0637,-60.3730,  0.61, "B"),
+    ("Acrux",           12.4433,-63.0990,  0.76, "B"),
+    ("Altair",          19.8464,  8.8683,  0.77, "A"),
+    ("Aldebaran",        4.5987, 16.5093,  0.85, "K"),
+    ("Antares",         16.4901,-26.4320,  0.96, "M"),
+    ("Spica",           13.4199,-11.1613,  0.97, "B"),
+    ("Pollux",           7.7553, 28.0261,  1.14, "K"),
+    ("Fomalhaut",       22.9608,-29.6224,  1.16, "A"),
+    ("Deneb",           20.6905, 45.2803,  1.25, "A"),
+    ("Mimosa",          12.7952,-59.6885,  1.25, "B"),
+    ("Regulus",         10.1395, 11.9672,  1.35, "B"),
+    ("Adhara",           6.9771,-28.9720,  1.50, "B"),
+    ("Castor",           7.5767, 31.8883,  1.57, "A"),
+    ("Gacrux",          12.5194,-57.1133,  1.59, "M"),
+    ("Shaula",          17.5601,-37.1033,  1.62, "B"),
+    ("Bellatrix",        5.4186,  6.3497,  1.64, "B"),
+    ("Elnath",           5.4381, 28.6074,  1.65, "B"),
+    ("Alnilam",          5.6036, -1.2019,  1.69, "B"),
+    ("AlNair",          22.1373,-46.9608,  1.73, "B"),
+    ("Alnitak",          5.6793, -1.9426,  1.74, "O"),
+    ("Alioth",          12.9005, 55.9598,  1.76, "A"),
+    ("Kaus Australis",  18.4029,-34.3846,  1.79, "B"),
+    ("Mirfak",           3.4053, 49.8612,  1.79, "F"),
+    ("Dubhe",           11.0621, 61.7511,  1.79, "K"),
+    ("Alkaid",          13.7923, 49.3133,  1.85, "B"),
+    ("Avior",            8.3750,-59.5097,  1.86, "K"),
+    ("Menkalinan",       5.9922, 44.9474,  1.90, "A"),
+    ("Atria",           16.8115,-69.0277,  1.91, "K"),
+    ("Alhena",           6.6283, 16.3993,  1.93, "A"),
+    ("Peacock",         20.4273,-56.7350,  1.94, "B"),
+    ("Mirzam",           6.3785,-17.9559,  1.98, "B"),
+    ("Alphard",          9.4598, -8.6586,  1.98, "K"),
+    ("Polaris",          2.5304, 89.2641,  1.97, "F"),
+    ("Hamal",            2.1196, 23.4624,  2.00, "K"),
+    ("Algieba",         10.3328, 19.8417,  2.01, "K"),
+    ("Diphda",           0.7264,-17.9866,  2.02, "K"),
+    ("Nunki",           18.9211,-26.2965,  2.02, "B"),
+    ("Mizar",           13.3988, 54.9254,  2.04, "A"),
+    ("Mirach",           1.1620, 35.6204,  2.06, "M"),
+    ("Kochab",          14.8451, 74.1556,  2.08, "K"),
+    ("Rasalhague",      17.5823, 12.5600,  2.08, "A"),
+    ("Saiph",            5.7956, -9.6696,  2.09, "B"),
+    ("Algol",            3.1361, 40.9554,  2.09, "B"),
+    ("Denebola",        11.8175, 14.5720,  2.14, "A"),
+    ("Gamma Cyg",       20.3706, 40.2567,  2.20, "F"),
+    ("Alphecca",        15.5784, 26.7148,  2.22, "A"),
+    ("Mintaka",          5.5334, -0.2991,  2.23, "O"),
+    ("Schedar",          0.6751, 56.5373,  2.24, "K"),
+    ("Caph",             0.1528, 59.1500,  2.27, "F"),
+    ("Dschubba",        16.0053,-22.6217,  2.29, "B"),
+    ("Epsilon Sco",     16.8357,-34.2930,  2.29, "K"),
+    ("Izar",            14.7497, 27.0742,  2.35, "K"),
+    ("Merak",           11.0307, 56.3824,  2.37, "A"),
+    ("Sabik",           17.1726,-15.7248,  2.43, "A"),
+    ("Phecda",          11.8976, 53.6948,  2.44, "A"),
+    ("Gamma Cas",        0.9451, 60.7167,  2.47, "B"),
+    ("Epsilon Cyg",     20.7702, 33.9703,  2.48, "K"),
+    ("Zosma",           11.2350, 20.5236,  2.56, "A"),
+    ("Ruchbah",          1.4304, 60.2353,  2.68, "A"),
+    ("Tau Sco",         16.5987,-28.2160,  2.82, "B"),
+    ("Delta Cru",       12.2519,-58.7490,  2.79, "B"),
+    ("Delta Cyg",       20.7281, 45.1303,  2.87, "A"),
+    ("Albireo",         19.5121, 27.9597,  3.08, "K"),
+    ("Megrez",          12.2568, 57.0326,  3.31, "A"),
+    ("Segin",            1.9064, 63.6700,  3.35, "B"),
+    ("Meissa",           5.5882,  9.9340,  3.39, "O"),
+]
+
+_CONSTELLATION_LINES = [
+    # Orion
+    ["Betelgeuse", "Bellatrix"], ["Betelgeuse", "Alnilam"],
+    ["Bellatrix", "Mintaka"], ["Mintaka", "Alnilam"], ["Alnilam", "Alnitak"],
+    ["Alnitak", "Saiph"], ["Mintaka", "Rigel"], ["Rigel", "Saiph"],
+    ["Betelgeuse", "Meissa"], ["Bellatrix", "Meissa"],
+    # Ursa Major (Big Dipper)
+    ["Dubhe", "Merak"], ["Merak", "Phecda"], ["Phecda", "Megrez"],
+    ["Megrez", "Dubhe"], ["Megrez", "Alioth"], ["Alioth", "Mizar"], ["Mizar", "Alkaid"],
+    # Cassiopeia
+    ["Caph", "Schedar"], ["Schedar", "Gamma Cas"], ["Gamma Cas", "Ruchbah"], ["Ruchbah", "Segin"],
+    # Scorpius
+    ["Dschubba", "Antares"], ["Antares", "Tau Sco"], ["Tau Sco", "Epsilon Sco"], ["Epsilon Sco", "Shaula"],
+    # Crux
+    ["Acrux", "Gacrux"], ["Mimosa", "Delta Cru"],
+    # Cygnus (Northern Cross)
+    ["Deneb", "Gamma Cyg"], ["Gamma Cyg", "Albireo"],
+    ["Gamma Cyg", "Delta Cyg"], ["Gamma Cyg", "Epsilon Cyg"],
+    # Leo
+    ["Regulus", "Algieba"], ["Algieba", "Zosma"], ["Zosma", "Denebola"],
+    # Ursa Minor
+    ["Polaris", "Kochab"],
+    # Boötes
+    ["Arcturus", "Izar"],
+]
+
+
+@api_bp.route("/sky/stars")
+def sky_stars():
+    lat = float(keyring.get_password("trellis-weather", "lat") or 40.0)
+    lon = float(keyring.get_password("trellis-weather", "lon") or -74.0)
+    stars = [
+        {"name": s[0], "ra": s[1], "dec": s[2], "mag": s[3], "spec": s[4]}
+        for s in _BRIGHT_STARS
+    ]
+    return jsonify({"lat": lat, "lon": lon, "stars": stars, "constellations": _CONSTELLATION_LINES})
+
+
+@api_bp.route("/sky/apod")
+def sky_apod():
+    api_key = keyring.get_password("trellis-nasa", "api_key") or "DEMO_KEY"
+    try:
+        resp = req.get("https://api.nasa.gov/planetary/apod", params={"api_key": api_key}, timeout=10)
+        resp.raise_for_status()
+    except Exception:
+        return jsonify(None)
+    data = resp.json()
+    return jsonify({
+        "date": data["date"],
+        "title": data["title"],
+        "explanation": data["explanation"],
+        "url": data["url"] if data["media_type"] == "image" else None,
+        "hdurl": data.get("hdurl") if data["media_type"] == "image" else None,
+        "media_type": data["media_type"],
+    })
+
+@api_bp.route("/sky/flights")
+def sky_flights():
+    lat = float(keyring.get_password("trellis-weather", "lat") or 40.0)
+    lon = float(keyring.get_password("trellis-weather", "lon") or -74.0)
+    delta = 8
+    try:
+        resp = req.get(
+            "https://opensky-network.org/api/states/all",
+            params={
+                "lamin": lat - delta, "lamax": lat + delta,
+                "lomin": lon - delta, "lomax": lon + delta,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        states = resp.json().get("states") or []
+    except Exception:
+        states = []
+    planes = []
+    for s in states:
+        if s[5] is None or s[6] is None:
+            continue
+        planes.append({
+            "callsign": (s[1] or "").strip(),
+            "lon": s[5], "lat": s[6],
+            "altitude": s[7] or 0,
+            "heading": s[10] or 0,
+            "on_ground": bool(s[8]),
+        })
+    return jsonify({"planes": planes, "center_lat": lat, "center_lon": lon})
+
+
+@api_bp.route("/sky/iss")
+def sky_iss():
+    resp = req.get("https://api.wheretheiss.at/v1/satellites/25544", timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    return jsonify({
+        "lat": round(data["latitude"], 4),
+        "lon": round(data["longitude"], 4),
+        "altitude_km": round(data["altitude"], 1),
+        "velocity_kmh": round(data["velocity"], 1),
+        "visibility": data.get("visibility", "")
+    })
+
+@api_bp.route("/sky/neo")
+def sky_neo():
+    api_key = keyring.get_password("trellis-nasa", "api_key") or "DEMO_KEY"
+    today = datetime.now(timezone.utc).date()
+    end = today + timedelta(days=7)
+    try:
+        resp = req.get(
+            "https://api.nasa.gov/neo/rest/v1/feed",
+            params={
+                "start_date": today.isoformat(),
+                "end_date": end.isoformat(),
+                "api_key": api_key,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return jsonify([])
+    neos = []
+    for day_neos in data.get("near_earth_objects", {}).values():
+        for neo in day_neos:
+            close = neo.get("close_approach_data", [{}])[0]
+            neos.append({
+                "name": neo["name"].strip("()"),
+                "date": close.get("close_approach_date", ""),
+                "miss_km": round(float(close.get("miss_distance", {}).get("kilometers", 0))),
+                "diameter_m": round(float(neo.get("estimated_diameter", {}).get("meters", {}).get("estimated_diameter_max", 0))),
+                "hazardous": neo.get("is_potentially_hazardous_asteroid", False),
+            })
+    neos.sort(key=lambda x: x["date"])
+    return jsonify(neos[:8])
