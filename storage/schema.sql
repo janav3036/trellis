@@ -12,3 +12,10 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(source, event_type);
+
+CREATE TABLE IF NOT EXISTS habits (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    color      TEXT NOT NULL DEFAULT '#6b9e6b',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

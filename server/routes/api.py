@@ -1,6 +1,9 @@
 import json
+import os
+import cloudinary
+import cloudinary.uploader
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, jsonify, redirect, request, Response
+from flask import Blueprint, jsonify, redirect, request, Response, send_from_directory
 from plotly import data
 from storage.db import get_connection
 import yfinance as yf
@@ -13,6 +16,12 @@ import keyring
 import requests as req
 
 api_bp = Blueprint("api", __name__)
+
+cloudinary.config(
+    cloud_name=keyring.get_password("trellis", "cloudinary_cloud_name"),
+    api_key=keyring.get_password("trellis", "cloudinary_api_key"),
+    api_secret=keyring.get_password("trellis", "cloudinary_api_secret"),
+)
 
 @api_bp.route("/events")
 def get_events():
@@ -740,3 +749,236 @@ def sky_neo():
             })
     neos.sort(key=lambda x: x["date"])
     return jsonify(neos[:8])
+
+
+@api_bp.route("/dreams/log", methods=["POST"])
+def dreams_log():
+    data = request.json
+    date = data.get("date")
+    title = data.get("title", "").strip()
+    if not date or not title:
+        return jsonify({"error": "date and title required"}), 400
+    now = datetime.now(timezone.utc)
+    timestamp = datetime.fromisoformat(date).replace(
+        tzinfo = timezone.utc,
+        hour = now.hour, minute = now.minute, second = now.second, microsecond = now.microsecond
+    )
+    metadata = {
+        "title": title,
+        "description": data.get("description", ""),
+        "mood": data.get("mood", ""),
+        "tags": data.get("tags", []),
+        "lucid": data.get("lucid", False),
+    }
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (timestamp.isoformat(), "dreams", "dream", json.dumps(metadata))
+        )
+    return jsonify({"count": cur.rowcount})
+
+@api_bp.route("/dreams")
+def dreams_list():
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, timestamp, metadata FROM events WHERE source='dreams' ORDER BY timestamp DESC"
+        ).fetchall()
+    return jsonify([
+        {"id": r[0], "timestamp": r[1], **json.loads(r[2])}
+        for r in rows
+    ])
+
+@api_bp.route("/photos/log", methods = ["POST"])
+def photos_log():
+    data = request.json
+    date = data.get("date")
+    url = data.get("url", "").strip()
+    if not date or not url:
+        return jsonify({"error": "date and url required"}), 400
+    timestamp = f"{date}T00:00:00+00:00"
+    metadata = {
+        "url": url, 
+        "caption": data.get("caption", ""),
+    }
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT OR REPLACE INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (timestamp, "photos", "daily", json.dumps(metadata))
+        )
+    return jsonify({"count": cur.rowcount})
+
+@api_bp.route("/photos")
+def photos_list():
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, timestamp, metadata FROM events WHERE source='photos' ORDER BY timestamp DESC"
+        ).fetchall()
+    return jsonify([
+        {"id": r[0], "date": r[1][:10], **json.loads(r[2])}
+        for r in rows
+    ])
+
+@api_bp.route("/photos/upload", methods=["POST"])
+def photos_upload():
+    if "file" not in request.files:
+        return jsonify({"error": "no file"}), 400
+    result = cloudinary.uploader.upload(
+        request.files["file"],
+        folder="trellis/photos",
+    )
+    return jsonify({"url": result["secure_url"]})
+
+@api_bp.route("/letters/log", methods=["POST"])
+def letters_log():
+    data = request.json
+    body = data.get("body", "").strip()
+    unlock_date = data.get("unlock_date")
+    if not body or not unlock_date:
+        return jsonify({"error": "body and unlock_date required"}), 400
+    now = datetime.now(timezone.utc)
+    metadata = {
+        "body": body,
+        "unlock_date": unlock_date,
+    }
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (now.isoformat(), "letters", "future", json.dumps(metadata))
+        )   
+    return jsonify({"ok": True})      
+
+@api_bp.route("/letters")
+def letters_list():
+    today = datetime.now(timezone.utc).date().isoformat()
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, timestamp, metadata FROM events WHERE source='letters' ORDER BY timestamp DESC"
+        ).fetchall()
+    result = []
+    for r in rows:
+        meta = json.loads(r[2])
+        unlocked = meta["unlock_date"] <= today
+        result.append({
+            "id": r[0],
+            "timestamp": r[1],
+            "unlock_date": meta["unlock_date"],
+            "unlocked": unlocked,
+            "body": meta["body"] if unlocked else None,
+        })  
+    return jsonify(result)
+
+@api_bp.route("/cron/check-letters")
+def cron_check_letters():
+    import os, smtplib
+    from email.mime.text import MIMEText
+    secret = os.environ.get("CRON_SECRET", "")
+    if request.headers.get("Authorization") != f"Bearer {secret}":
+        return jsonify({"error": "unauthorized"}), 401
+    today = datetime.now(timezone.utc).date().isoformat()
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT metadata FROM events WHERE source='letters' AND event_type='future'"
+        ).fetchall()
+    to_send = [
+        json.loads(r[0]) for r in rows
+        if json.loads(r[0]).get("unlock_date") == today
+    ]
+    if not to_send:
+        return jsonify({"sent": 0})
+    gmail_user = "janavdshah30@gmail.com"
+    password = keyring.get_password("trellis", "gmail_app_password")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(gmail_user, password)
+        for letter in to_send:
+            msg = MIMEText(letter["body"], "plain")
+            msg["Subject"] = f"A letter from your past self — {today}"
+            msg["From"] = gmail_user
+            msg["To"] = gmail_user
+            smtp.send_message(msg)
+    return jsonify({"sent": len(to_send)})
+
+@api_bp.route("/quotes/log", methods=["POST"])
+def quotes_log():
+    data = request.json
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "text required"}), 400
+    now = datetime.now(timezone.utc)
+    metadata = {
+        "text": text,
+        "author": data.get("author", "").strip(),
+        "source_title": data.get("source_title", "").strip(),
+        "tags": data.get("tags", []),
+    }
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (now.isoformat(), "quotes", "quote", json.dumps(metadata))
+        )
+    return jsonify({"ok": True})
+
+@api_bp.route("/quotes")
+def quotes_list():
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, timestamp, metadata FROM events WHERE source='quotes' ORDER BY timestamp DESC"
+        ).fetchall()
+    return jsonify([
+        {"id": r[0], "timestamp": r[1], **json.loads(r[2])}
+        for r in rows
+    ])
+
+@api_bp.route("/habits")
+def habits_list():
+    today = datetime.now(timezone.utc).date().isoformat()
+    with get_connection() as conn:
+        habits = conn.execute("SELECT id, name, color FROM habits ORDER BY created_at").fetchall()
+        checkins_today = conn.execute(
+            "SELECT json_extract(metadata, '$.habit_id') as habit_id FROM events "
+            "WHERE source='habits' AND event_type='checkin' AND timestamp LIKE ?",
+            (f"{today}%",)
+        ).fetchall()
+    checked_ids = {int(r[0]) for r in checkins_today if r[0]}
+    return jsonify([
+        {"id": h[0], "name": h[1], "color": h[2], "done_today": h[0] in checked_ids}
+        for h in habits
+    ])
+
+@api_bp.route("/habits", methods=["POST"])
+def habits_create():
+    data = request.json
+    name = data.get("name", "").strip()
+    color = data.get("color", "#6b9e6b")
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    with get_connection() as conn:
+        conn.execute("INSERT INTO habits (name, color) VALUES (?, ?)", (name, color))
+    return jsonify({"ok": True})
+
+@api_bp.route("/habits/<int:habit_id>", methods=["DELETE"])
+def habits_delete(habit_id):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM habits WHERE id = ?", (habit_id,))
+    return jsonify({"ok": True})
+
+@api_bp.route("/habits/<int:habit_id>/checkin", methods=["POST"])
+def habits_checkin(habit_id):
+    today = datetime.now(timezone.utc).date().isoformat()
+    with get_connection() as conn:
+        habit = conn.execute("SELECT name FROM habits WHERE id = ?", (habit_id,)).fetchone()
+        if not habit:
+            return jsonify({"error": "not found"}), 404
+        existing = conn.execute(
+            "SELECT id FROM events WHERE source='habits' AND event_type='checkin' "
+            "AND timestamp LIKE ? AND json_extract(metadata, '$.habit_id') = ?",
+            (f"{today}%", habit_id)
+        ).fetchone()
+        if existing:
+            conn.execute("DELETE FROM events WHERE id = ?", (existing[0],))
+            return jsonify({"done": False})
+        now = datetime.now(timezone.utc)
+        conn.execute(
+            "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (now.isoformat(), "habits", "checkin", json.dumps({"habit_id": habit_id, "habit_name": habit[0]}))
+        )
+    return jsonify({"done": True})
