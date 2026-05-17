@@ -76,32 +76,36 @@ def _proxy_url(url):
 
 @api_bp.route("/now-playing")
 def now_playing():
-    ingester = SpotifyIngester()
-    resp = req.get(
-        "https://api.spotify.com/v1/me/player/currently-playing",
-        headers=ingester._get_headers()
-    )
-    if resp.status_code == 401:
-        ingester._refresh_token()
+    try:
+        ingester = SpotifyIngester()
         resp = req.get(
             "https://api.spotify.com/v1/me/player/currently-playing",
-            headers=ingester._get_headers()
+            headers=ingester._get_headers(),
+            timeout=5,
         )
-    if resp.status_code == 204 or not resp.content:
+        if resp.status_code == 401:
+            ingester._refresh_token()
+            resp = req.get(
+                "https://api.spotify.com/v1/me/player/currently-playing",
+                headers=ingester._get_headers(),
+                timeout=5,
+            )
+        if resp.status_code == 204 or not resp.content:
+            return jsonify(None)
+        data = resp.json()
+        if not data.get("item"):
+            return jsonify(None)
+        item = data["item"]
+        return jsonify({
+            "track": item["name"],
+            "artist": ", ".join(a["name"] for a in item["artists"]),
+            "album": item["album"]["name"],
+            "cover": _proxy_url(_full_img_url(item["album"]["images"][0]["url"])) if item["album"]["images"] else None,
+            "progress_ms": data["progress_ms"],
+            "duration_ms": item["duration_ms"],
+        })
+    except Exception:
         return jsonify(None)
-    data = resp.json()
-    if not data.get("item"):
-        return jsonify(None)
-    item = data["item"]
-    return jsonify({
-        "track": item["name"],
-        "artist": ", ".join(a["name"] for a in item["artists"]),
-        "album": item["album"]["name"],
-        "cover": _proxy_url(_full_img_url(item["album"]["images"][0]["url"])) if item["album"]["images"] else None,
-
-        "progress_ms": data["progress_ms"],
-        "duration_ms": item["duration_ms"],
-    })
 
 @api_bp.route("/playlists")
 def playlists():
@@ -336,6 +340,27 @@ def movies_log():
     return jsonify({"count": cur.rowcount})
 
 
+@api_bp.route("/movies/watchlist", methods=["POST"])
+def movies_watchlist_add():
+    data = request.json
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    now = datetime.now(timezone.utc)
+    metadata = {
+        "tmdb_id":    data.get("tmdb_id"),
+        "title":      title,
+        "year":       data.get("year"),
+        "poster_path": data.get("poster_path"),
+    }
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (now.isoformat(), "movies", "watchlist", json.dumps(metadata))
+        )
+    return jsonify({"id": cur.lastrowid})
+
+
 @api_bp.route("/events/<int:event_id>", methods=["DELETE"])
 def delete_event(event_id):
     with get_connection() as conn:
@@ -476,6 +501,54 @@ def f1_race_results(round):
             for r in race.get("Results", [])
         ]
     })
+
+@api_bp.route("/f1/photos/upload", methods=["POST"])
+def f1_photos_upload():
+    if "file" not in request.files:
+        return jsonify({"error": "no file"}), 400
+    result = cloudinary.uploader.upload(
+        request.files["file"],
+        folder="trellis/f1-photos",
+    )
+    return jsonify({"url": result["secure_url"]})
+
+@api_bp.route("/f1/photos/log", methods=["POST"])
+def f1_photos_log():
+    data = request.json
+    round_num = data.get("round")
+    url = data.get("url", "").strip()
+    if not round_num or not url:
+        return jsonify({"error": "round and url required"}), 400
+    metadata = {
+        "round": int(round_num),
+        "race_name": data.get("race_name", ""),
+        "url": url,
+        "caption": data.get("caption", ""),
+    }
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
+            (datetime.now(timezone.utc).isoformat(), "f1-photos", "race-photo", json.dumps(metadata))
+        )
+    return jsonify({"ok": True})
+
+@api_bp.route("/f1/photos")
+def f1_photos_list():
+    round_filter = request.args.get("round")
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, timestamp, metadata FROM events WHERE source='f1-photos' AND event_type='race-photo' ORDER BY timestamp DESC"
+        ).fetchall()
+    photos = [{"id": r[0], "timestamp": r[1], **json.loads(r[2])} for r in rows]
+    if round_filter:
+        photos = [p for p in photos if str(p.get("round")) == str(round_filter)]
+    return jsonify(photos)
+
+@api_bp.route("/f1/photos/<int:photo_id>", methods=["DELETE"])
+def f1_photos_delete(photo_id):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM events WHERE id=? AND source='f1-photos'", (photo_id,))
+    return jsonify({"ok": True})
 
 @api_bp.route("/market/heartbeat")
 def market_heartbeat():
@@ -654,23 +727,33 @@ def sky_stars():
     return jsonify({"lat": lat, "lon": lon, "stars": stars, "constellations": _CONSTELLATION_LINES})
 
 
+_apod_cache = {"date": None, "data": None}
+
 @api_bp.route("/sky/apod")
 def sky_apod():
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _apod_cache["date"] == today and _apod_cache["data"] is not None:
+        return jsonify(_apod_cache["data"])
     api_key = keyring.get_password("trellis-nasa", "api_key") or "DEMO_KEY"
     try:
         resp = req.get("https://api.nasa.gov/planetary/apod", params={"api_key": api_key}, timeout=10)
         resp.raise_for_status()
     except Exception:
+        if _apod_cache["data"] is not None:
+            return jsonify(_apod_cache["data"])
         return jsonify(None)
     data = resp.json()
-    return jsonify({
+    result = {
         "date": data["date"],
         "title": data["title"],
         "explanation": data["explanation"],
         "url": data["url"] if data["media_type"] == "image" else None,
         "hdurl": data.get("hdurl") if data["media_type"] == "image" else None,
         "media_type": data["media_type"],
-    })
+    }
+    _apod_cache["date"] = today
+    _apod_cache["data"] = result
+    return jsonify(result)
 
 @api_bp.route("/sky/flights")
 def sky_flights():

@@ -502,7 +502,7 @@
                                 >Muscle groups</label
                             >
                             <div class="flex flex-wrap gap-2">
-                                {#each ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Legs", "Core", "Calisthenics", "Boxing"] as muscle}
+                                {#each ["Chest", "Back", "Shoulders", "Biceps", "Triceps", "Legs", "Core", "Forearms", "Calisthenics", "Boxing"] as muscle}
                                     <button
                                         on:click={() =>
                                             (gymMuscles = gymMuscles.includes(
