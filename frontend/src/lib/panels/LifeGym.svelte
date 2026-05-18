@@ -1,8 +1,9 @@
 <script>
   import { onMount } from 'svelte';
+  import { todayIST, fmtDate } from '../ist.js';
   let sessions = [];
   let showForm = false;
-  let gymDate = new Date().toISOString().slice(0,10);
+  let gymDate = todayIST();
   let gymType = 'workout';
   let gymMuscles = [];
   let gymDistance = '';
@@ -21,7 +22,7 @@
     if (s < 86400) return `${Math.floor(s/3600)}h ago`;
     const d = Math.floor(s/86400);
     if (d < 30) return `${d}d ago`;
-    return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return fmtDate(ts);
   }
   async function load() {
     sessions = await (await fetch('/api/events?source=gym&event_type=session')).json();

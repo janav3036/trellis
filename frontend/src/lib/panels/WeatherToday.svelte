@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { daysAgoIST } from '../ist.js';
   let today = null;
 
   function tempColor(t) {
@@ -22,12 +23,8 @@
     return 'Thunderstorm';
   }
 
-  function daysAgo(n) {
-    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
-  }
-
   onMount(async () => {
-    const evs = await (await fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgo(1)}`)).json();
+    const evs = await (await fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgoIST(1)}`)).json();
     today = evs[0] ?? null;
   });
 </script>

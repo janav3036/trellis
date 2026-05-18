@@ -1,10 +1,11 @@
 <script>
   import { onMount } from 'svelte';
+  import { todayIST } from '../ist.js';
   export let monthOnly = false;
 
   let photos = [], selectedPhoto = null;
   let year = new Date().getFullYear();
-  const TODAY = new Date().toISOString().slice(0, 10);
+  const TODAY = todayIST();
   const THIS_MONTH = new Date().getMonth();
 
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -14,7 +15,7 @@
     const days = [];
     const start = new Date(year, 0, 1);
     for (let d = new Date(start); d.getFullYear() === year; d.setDate(d.getDate()+1)) {
-      days.push(d.toISOString().slice(0,10));
+      days.push(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
     }
     return days;
   })();

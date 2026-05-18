@@ -1,6 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import Plotly from "plotly.js-dist-min";
+    import { daysAgoIST } from "../lib/ist.js";
 
     let chartEl;
     let range = "30d";
@@ -43,16 +44,10 @@
         { key: "180d", label: "6 months", n: 180 },
     ];
 
-    function daysAgo(n) {
-        const d = new Date();
-        d.setDate(d.getDate() - n);
-        return d.toISOString().split("T")[0];
-    }
-
     async function loadChart(r) {
         range = r.key;
         const res = await fetch(
-            `/api/events?source=weather&event_type=daily&date_from=${daysAgo(r.n)}`,
+            `/api/events?source=weather&event_type=daily&date_from=${daysAgoIST(r.n)}`,
         );
         const events = await res.json();
         const x = events.map((e) => e.timestamp.split("T")[0]).reverse();

@@ -23,6 +23,16 @@ cloudinary.config(
     api_secret=keyring.get_password("trellis", "cloudinary_api_secret"),
 )
 
+def _spotify_cutoff(range_: str) -> str | None:
+    now = datetime.now(timezone.utc)
+    if range_ == "weekly":
+        return (now - timedelta(days=7)).isoformat()
+    if range_ == "monthly":
+        return (now - timedelta(days=30)).isoformat()
+    if range_ == "6m":
+        return (now - timedelta(days=180)).isoformat()
+    return None  # alltime — no filter
+
 @api_bp.route("/events")
 def get_events():
     source = request.args.get("source")
@@ -1065,3 +1075,98 @@ def habits_checkin(habit_id):
             (now.isoformat(), "habits", "checkin", json.dumps({"habit_id": habit_id, "habit_name": habit[0]}))
         )
     return jsonify({"done": True})
+
+@api_bp.route("/spotify/top-tracks")
+def spotify_top_tracks():
+    range_ = request.args.get("range", "monthly")
+    cutoff = _spotify_cutoff(range_)
+    query = """
+        SELECT json_extract(metadata, '$.track_name') as track,
+               json_extract(metadata, '$.artist') as artist,
+               COUNT(*) as plays
+        FROM events
+        WHERE source = 'spotify'
+        """
+    params = []
+    if cutoff:
+        query+= " AND timestamp >= ?"
+        params.append(cutoff)
+    query += " GROUP BY track, artist ORDER BY plays DESC LIMIT 15"
+    with get_connection() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@api_bp.route("/spotify/top-artists")
+def spotify_top_artists():
+    range_ = request.args.get("range", "monthly")
+    cutoff = _spotify_cutoff(range_)
+    query = """
+        SELECT json_extract(metadata, '$.artist') as artist,
+               COUNT(*) as plays
+        FROM events
+        WHERE source = 'spotify'
+    """
+    params = []
+    if cutoff:
+        query += " AND timestamp >= ?"
+        params.append(cutoff)
+    query += " GROUP BY artist ORDER BY plays DESC LIMIT 15"
+    with get_connection() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@api_bp.route("/spotify/streak")
+def spotify_streak():
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT DISTINCT date(timestamp, 'localtime') as day
+            FROM events
+            WHERE source = 'spotify'
+            ORDER BY day DESC
+        """).fetchall()
+    days = [r["day"] for r in rows]
+    if not days:
+        return jsonify({"streak": 0, "longest": 0})
+
+    today = datetime.now().date()
+    yesterday = today - timedelta(days=1)
+    first = datetime.fromisoformat(days[0]).date()
+
+    if first < yesterday:
+        streak = 0
+    else:
+        streak = 0
+        expected = first
+        for day_str in days:
+            d = datetime.fromisoformat(day_str).date()
+            if d == expected:
+                streak += 1
+                expected = d - timedelta(days=1)
+            else:
+                break
+
+    dates = sorted([datetime.fromisoformat(d).date() for d in days])
+    longest, current = 1, 1
+    for i in range(1, len(dates)):
+        if (dates[i] - dates[i - 1]).days == 1:
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 1
+
+    return jsonify({"streak": streak, "longest": longest})
+
+@api_bp.route("/spotify/heatmap")
+def spotify_heatmap():
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT
+                CAST(strftime('%w', timestamp, 'localtime') AS INTEGER) as dow,
+                CAST(strftime('%H', timestamp, 'localtime') AS INTEGER) as hour,
+                COUNT(*) as plays
+            FROM events
+            WHERE source = 'spotify'
+            GROUP BY dow, hour
+        """).fetchall()
+    return jsonify([dict(r) for r in rows])

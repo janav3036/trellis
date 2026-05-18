@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import Plotly from 'plotly.js-dist-min';
+  import { daysAgoIST } from '../ist.js';
 
   let el;
   let range = '30d';
@@ -11,14 +12,12 @@
     { key: '180d', label: '6 months', n: 180 },
   ];
 
-  function daysAgo(n) {
-    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
-  }
+
 
   async function loadChart(r) {
     range = r.key;
-    const evs = await (await fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgo(r.n)}`)).json();
-    const x = evs.map(e => e.timestamp.split('T')[0]).reverse();
+    const evs = await (await fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgoIST(r.n)}`)).json();
+    const x = evs.map(e => new Date(e.timestamp).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })).reverse();
     const yMax = evs.map(e => e.metadata.temp_max).reverse();
     const yMin = evs.map(e => e.metadata.temp_min).reverse();
     const precip = evs.map(e => e.metadata.precipitation).reverse();

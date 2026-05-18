@@ -1,6 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import Plotly from "plotly.js-dist-min";
+    import { daysAgoIST, buildDatesIST, groupByDayIST, groupByWeekIST, istTime, fmtDate } from "../lib/ist.js";
 
     let chartEl;
     let range = "monthly";
@@ -34,48 +35,6 @@
         margin: { t: 40, r: 20, b: 60, l: 50 },
     };
 
-    function startOfDay() {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        return d.toISOString().split("T")[0];
-    }
-
-    function daysAgo(n) {
-        const d = new Date();
-        d.setDate(d.getDate() - n);
-        return d.toISOString().split("T")[0];
-    }
-
-    function buildDates(n) {
-        return Array.from({ length: n }, (_, i) => daysAgo(n - 1 - i));
-    }
-
-    function groupByDay(events) {
-        const counts = {};
-        for (const e of events) {
-            const day = e.timestamp.split("T")[0];
-            counts[day] = (counts[day] || 0) + 1;
-        }
-        return counts;
-    }
-    function groupByWeek(events) {
-        const counts = {};
-        for (const e of events) {
-            const d = new Date(e.timestamp);
-            const dayOfWeek = d.getUTCDay();
-            const weekStart = new Date(
-                Date.UTC(
-                    d.getUTCFullYear(),
-                    d.getUTCMonth(),
-                    d.getUTCDate() - dayOfWeek,
-                ),
-            );
-            const week = weekStart.toISOString().split("T")[0];
-            counts[week] = (counts[week] || 0) + 1;
-        }
-        return counts;
-    }
-
     function timeAgo(timestamp) {
         const seconds = Math.floor((Date.now() - new Date(timestamp)) / 1000);
         if (seconds < 60) return "just now";
@@ -85,7 +44,7 @@
         if (hours < 24) return `${hours}h ago`;
         const days = Math.floor(hours / 24);
         if (days < 30) return `${days}d ago`;
-        return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return fmtDate(timestamp);
     }
 
     async function loadChart(r) {
@@ -93,7 +52,7 @@
         commits = [];
 
         if (r === "daily") {
-            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${startOfDay()}`);
+            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(0)}`);
             commits = await res.json();
             if (chartEl) Plotly.purge(chartEl);
             return;
@@ -102,21 +61,21 @@
         let events, dates, counts, title;
 
         if (r === "monthly") {
-            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(29)}`);
+            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(29)}`);
             events = await res.json();
-            dates = buildDates(30);
-            counts = groupByDay(events);
+            dates = buildDatesIST(30);
+            counts = groupByDayIST(events);
             title = "GitHub — last 30 days";
         } else if (r === "6m") {
-            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(179)}`);
+            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(179)}`);
             events = await res.json();
-            dates = buildDates(180);
-            counts = groupByDay(events);
+            dates = buildDatesIST(180);
+            counts = groupByDayIST(events);
             title = "GitHub — last 6 months";
         } else {
-            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(364)}`);
+            const res = await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(364)}`);
             events = await res.json();
-            counts = groupByWeek(events);
+            counts = groupByWeekIST(events);
             dates = Object.keys(counts).sort();
             title = "GitHub — last year (by week)";
         }
@@ -131,7 +90,7 @@
 
     onMount(async () => {
         const [recentRes, prRes, reposRes] = await Promise.all([
-            fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(29)}`),
+            fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(29)}`),
             fetch(`/api/events?source=github&event_type=pr`),
             fetch("/api/github/repos"),
             loadChart("monthly"),
@@ -201,7 +160,7 @@
         <div class="flex flex-col gap-2 max-w-2xl">
             {#each commits as c}
                 <div class="flex items-center gap-4 px-4 py-2 rounded-lg bg-[#242019]">
-                    <span class="text-xs text-[#9a9080] shrink-0">{new Date(c.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span class="text-xs text-[#9a9080] shrink-0">{istTime(c.timestamp)}</span>
                     <span class="text-xs bg-[#1a1714] text-[#6b9e6b] px-2 py-0.5 rounded font-mono shrink-0">{c.metadata.repo.split("/")[1]}</span>
                     <span class="text-sm truncate">{c.metadata.message}</span>
                     <span class="text-xs text-[#9a9080] font-mono shrink-0">{c.metadata.sha}</span>

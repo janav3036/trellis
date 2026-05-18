@@ -1,9 +1,10 @@
 <script>
   import { onMount } from 'svelte';
+  import { todayIST, fmtDate } from '../ist.js';
 
   let movies = [], expandedMovie = null, selectedGenres = new Set();
   let showForm = false;
-  let movieDate = new Date().toISOString().slice(0,10);
+  let movieDate = todayIST();
   let movieQuery = '', movieResults = [], selectedMovie = null;
   let movieRating = null, movieNotes = '', movieStatus = '';
   let searchTimeout;
@@ -161,7 +162,7 @@
         {#if expandedMovie.metadata.rating}
           <div class="text-[#c8a84b] text-xl">{'★'.repeat(expandedMovie.metadata.rating)}{'☆'.repeat(5-expandedMovie.metadata.rating)}</div>
         {/if}
-        <div class="text-xs text-[#9a9080]">Watched {new Date(expandedMovie.timestamp).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+        <div class="text-xs text-[#9a9080]">Watched {fmtDate(expandedMovie.timestamp, {month:'long',day:'numeric',year:'numeric'})}</div>
         {#if expandedMovie.metadata.overview}
           <p class="text-xs text-[#9a9080] leading-relaxed">{expandedMovie.metadata.overview}</p>
         {/if}

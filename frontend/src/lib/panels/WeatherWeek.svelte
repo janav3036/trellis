@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { daysAgoIST } from '../ist.js';
   let days = [], forecast = [], weekDays = [], weekOffset = 0;
 
   function tempColor(t) {
@@ -20,10 +21,6 @@
     if (code <= 82) return 'Showers';
     return 'Storm';
   }
-  function daysAgo(n) {
-    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
-  }
-
   $: {
     const today = new Date();
     const dow = today.getDay();
@@ -47,7 +44,7 @@
 
   onMount(async () => {
     const [calRes, fRes] = await Promise.all([
-      fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgo(89)}`),
+      fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgoIST(89)}`),
       fetch('/api/weather/forecast'),
     ]);
     days = (await calRes.json()).reverse();

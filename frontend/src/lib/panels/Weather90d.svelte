@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { daysAgoIST, fmtDate } from '../ist.js';
   let days = [];
 
   function tempColor(t) {
@@ -19,12 +20,8 @@
     if (code <= 77) return 'Snow';
     return 'Storm';
   }
-  function daysAgo(n) {
-    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
-  }
-
   onMount(async () => {
-    days = (await (await fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgo(89)}`)).json()).reverse();
+    days = (await (await fetch(`/api/events?source=weather&event_type=daily&date_from=${daysAgoIST(89)}`)).json()).reverse();
   });
 </script>
 
@@ -40,7 +37,7 @@
           style="background:{tempColorAlpha(m.temp_max,0.18)}; border:1px solid {tempColorAlpha(m.temp_max,0.35)}"
           title="{weatherLabel(m.weathercode)} — {m.precipitation}mm">
           <div class="text-[9px] text-[#9a9080] mb-0.5">
-            {new Date(d.timestamp).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+            {fmtDate(d.timestamp)}
           </div>
           <div class="text-xs font-semibold" style="color:{tempColor(m.temp_max)}">{Math.round(m.temp_max)}°</div>
           <div class="text-[9px] text-[#9a9080]">{Math.round(m.temp_min)}°</div>

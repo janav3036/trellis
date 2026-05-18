@@ -1,10 +1,10 @@
 <script>
   import { onMount } from 'svelte';
+  import { push } from 'svelte-spa-router';
+  import { daysAgoIST, fmtDate } from '../ist.js';
+
   let commits = [];
 
-  function daysAgo(n) {
-    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
-  }
   function timeAgo(ts) {
     const s = Math.floor((Date.now() - new Date(ts)) / 1000);
     if (s < 60) return 'just now';
@@ -12,16 +12,19 @@
     if (s < 86400) return `${Math.floor(s/3600)}h ago`;
     const d = Math.floor(s/86400);
     if (d < 30) return `${d}d ago`;
-    return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return fmtDate(ts);
   }
 
   onMount(async () => {
-    commits = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(29)}`)).json();
+    commits = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(29)}`)).json();
   });
 </script>
 
 <div class="bg-[#242019] rounded-xl p-4 h-full flex flex-col overflow-hidden">
-  <div class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3 shrink-0">Recent Commits</div>
+  <button
+    on:click={() => push('/code')}
+    class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3 shrink-0 hover:text-[#e8e0d0] transition-colors text-left"
+  >Recent Commits →</button>
   {#if commits.length === 0}
     <p class="text-sm text-[#9a9080]">No commits in the last 30 days.</p>
   {:else}

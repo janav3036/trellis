@@ -1,5 +1,6 @@
 <script>
   import { onMount } from "svelte";
+  import { todayIST, fmtDate } from "../lib/ist.js";
 
   let dreams = [];
   let showForm = false;
@@ -27,11 +28,11 @@
     if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
     const days = Math.floor(secs / 86400);
     if (days < 30) return `${days}d ago`;
-    return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return fmtDate(ts, { month: "short", day: "numeric", year: "numeric" });
   }
 
   let form = {
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIST(),
     title: "",
     description: "",
     mood: "neutral",
@@ -54,7 +55,7 @@
         tags: form.tags.split(",").map(t => t.trim()).filter(Boolean),
       }),
     });
-    form = { date: new Date().toISOString().slice(0, 10), title: "", description: "", mood: "neutral", tags: "", lucid: false };
+    form = { date: todayIST(), title: "", description: "", mood: "neutral", tags: "", lucid: false };
     showForm = false;
     loadDreams();
   }
@@ -71,7 +72,7 @@
   let selectedPhoto = null;
   let showPhotoForm = false;
   let photoForm = {
-    date: new Date().toISOString().slice(0, 10),
+    date: todayIST(),
     url: "",
     caption: "",
   };
@@ -84,7 +85,7 @@
     const start = new Date(photoYear, 0, 1);
     const end = new Date(photoYear, 11, 31);
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      days.push(d.toISOString().slice(0, 10));
+      days.push(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
     }
     return days;
   })();
@@ -111,7 +112,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(photoForm),
     });
-    photoForm = { date: new Date().toISOString().slice(0, 10), url: "", caption: "" };
+    photoForm = { date: todayIST(), url: "", caption: "" };
     showPhotoForm = false;
     loadPhotos();
   }
@@ -414,7 +415,7 @@
           <div class="grid grid-cols-7 gap-0.5">
             {#each monthDays as day}
               {@const photo = photosByDate[day]}
-              {@const isFuture = day > new Date().toISOString().slice(0, 10)}
+              {@const isFuture = day > todayIST()}
               <button
                 title={photo ? (photo.caption || day) : day}
                 on:click={() => { if (photo) selectedPhoto = photo; }}
@@ -652,7 +653,7 @@
                   <span class="text-lg opacity-40">🔒</span>
                   <div>
                     <div class="text-sm font-medium text-[#9a9080]">Sealed</div>
-                    <div class="text-xs text-[#9a9080]">Opens {new Date(letter.unlock_date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+                    <div class="text-xs text-[#9a9080]">Opens {new Date(letter.unlock_date + "T12:00:00").toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", month: "long", day: "numeric", year: "numeric" })}</div>
                   </div>
                 {/if}
               </div>
@@ -682,7 +683,7 @@
         <div>
           <div class="text-xl font-semibold mb-1">{expandedDream.title}</div>
           <div class="text-xs text-[#9a9080]">
-            {new Date(expandedDream.timestamp).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            {new Date(expandedDream.timestamp).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </div>
         </div>
         <button on:click={() => (expandedDream = null)} class="text-[#9a9080] hover:text-[#e8e0d0]">✕</button>
@@ -728,7 +729,7 @@
       <div class="px-6 py-4 flex items-start justify-between gap-4">
         <div>
           <div class="text-sm text-[#9a9080]">
-            {new Date(selectedPhoto.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            {new Date(selectedPhoto.date + "T12:00:00").toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </div>
           {#if selectedPhoto.caption}
             <p class="text-sm text-[#c8c0b0] mt-1">{selectedPhoto.caption}</p>
@@ -761,8 +762,8 @@
     >
       <div class="flex items-start justify-between gap-4 mb-2">
         <div class="text-xs text-[#9a9080]">
-          Written {new Date(expandedLetter.timestamp).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-          · unlocked {new Date(expandedLetter.unlock_date + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+          Written {new Date(expandedLetter.timestamp).toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", month: "long", day: "numeric", year: "numeric" })}
+          · unlocked {new Date(expandedLetter.unlock_date + "T12:00:00").toLocaleDateString("en-US", { timeZone: "Asia/Kolkata", month: "long", day: "numeric", year: "numeric" })}
         </div>
         <button on:click={() => (expandedLetter = null)} class="text-[#9a9080] hover:text-[#e8e0d0] shrink-0">✕</button>
       </div>

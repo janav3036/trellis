@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import Plotly from 'plotly.js-dist-min';
+  import { daysAgoIST, buildDatesIST, groupByDayIST, groupByWeekIST } from '../ist.js';
 
   let el;
   let range = 'monthly';
@@ -11,26 +12,6 @@
     { key: '6m',      label: '6 months' },
     { key: 'yearly',  label: 'Year' },
   ];
-
-  function daysAgo(n) {
-    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
-  }
-  function buildDates(n) { return Array.from({ length: n }, (_, i) => daysAgo(n - 1 - i)); }
-  function groupByDay(evs) {
-    const c = {};
-    for (const e of evs) { const d = e.timestamp.split('T')[0]; c[d] = (c[d] || 0) + 1; }
-    return c;
-  }
-  function groupByWeek(evs) {
-    const c = {};
-    for (const e of evs) {
-      const d = new Date(e.timestamp);
-      const ws = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - d.getUTCDay()));
-      const w = ws.toISOString().split('T')[0];
-      c[w] = (c[w] || 0) + 1;
-    }
-    return c;
-  }
 
   const layout = {
     paper_bgcolor: '#1a1714', plot_bgcolor: '#1a1714',
@@ -46,20 +27,20 @@
     range = r;
     dailyCommits = [];
     if (r === 'daily') {
-      dailyCommits = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(0)}`)).json();
+      dailyCommits = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(0)}`)).json();
       if (el) Plotly.purge(el);
       return;
     }
     let evs, dates, counts, title;
     if (r === 'monthly') {
-      evs = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(29)}`)).json();
-      dates = buildDates(30); counts = groupByDay(evs); title = 'GitHub — last 30 days';
+      evs = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(29)}`)).json();
+      dates = buildDatesIST(30); counts = groupByDayIST(evs); title = 'GitHub — last 30 days';
     } else if (r === '6m') {
-      evs = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(179)}`)).json();
-      dates = buildDates(180); counts = groupByDay(evs); title = 'GitHub — last 6 months';
+      evs = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(179)}`)).json();
+      dates = buildDatesIST(180); counts = groupByDayIST(evs); title = 'GitHub — last 6 months';
     } else {
-      evs = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgo(364)}`)).json();
-      counts = groupByWeek(evs); dates = Object.keys(counts).sort(); title = 'GitHub — last year';
+      evs = await (await fetch(`/api/events?source=github&event_type=commit&date_from=${daysAgoIST(364)}`)).json();
+      counts = groupByWeekIST(evs); dates = Object.keys(counts).sort(); title = 'GitHub — last year';
     }
     Plotly.react(el, [{ x: dates, y: dates.map(d => counts[d] || 0), type: 'bar', marker: { color: '#6b9e6b' } }],
       { ...layout, title: { text: title, font: { color: '#e8e0d0', size: 12 } } });

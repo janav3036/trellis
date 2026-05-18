@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { fmtDate } from '../ist.js';
   let dreams = [], expandedDream = null;
 
   const MOOD_COLORS = {
@@ -17,7 +18,7 @@
     if (s<3600) return `${Math.floor(s/60)}m ago`;
     if (s<86400) return `${Math.floor(s/3600)}h ago`;
     const d=Math.floor(s/86400); if(d<30) return `${d}d ago`;
-    return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    return fmtDate(ts, {month:'short',day:'numeric',year:'numeric'});
   }
   async function load() {
     dreams = await (await fetch('/api/dreams')).json();
@@ -61,7 +62,7 @@
         <div>
           <div class="text-xl font-semibold mb-1">{expandedDream.title}</div>
           <div class="text-xs text-[#9a9080]">
-            {new Date(expandedDream.timestamp).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
+            {fmtDate(expandedDream.timestamp, {weekday:'long',month:'long',day:'numeric',year:'numeric'})}
           </div>
         </div>
         <button on:click={() => expandedDream=null} class="text-[#9a9080] hover:text-[#e8e0d0]">✕</button>

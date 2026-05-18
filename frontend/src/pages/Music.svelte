@@ -1,217 +1,197 @@
 <script>
-  import { onMount } from "svelte";
-  import Plotly from "plotly.js-dist-min";
+  import { onMount, onDestroy } from 'svelte';
+  import { musicTheme, SPOTIFY_THEME } from '../lib/musicTheme.js';
+  import MusicNowPlayingCard from '../lib/panels/MusicNowPlayingCard.svelte';
+  import MusicStreak         from '../lib/panels/MusicStreak.svelte';
+  import MusicTopTracks      from '../lib/panels/MusicTopTracks.svelte';
+  import MusicTopArtists     from '../lib/panels/MusicTopArtists.svelte';
+  import MusicHeatmap        from '../lib/panels/MusicHeatmap.svelte';
+  import MusicPlaysChart     from '../lib/panels/MusicPlaysChart.svelte';
+  import MusicPlaylists      from '../lib/panels/MusicPlaylists.svelte';
 
-  let chartEl;
   let nowPlaying = null;
-  let playlists = [];
-  let backfillDate = "";
-  let backfillStatus = "";
-  let range = "monthly";
-  let dailyTracks = [];
+  let lastCover = null;
+  let timer;
+  let backfillDate = '';
+  let backfillStatus = '';
 
-  const RANGES = [
-    { key: "daily",   label: "Today" },
-    { key: "monthly", label: "30 days" },
-    { key: "6m",      label: "6 months" },
-    { key: "yearly",  label: "Year" },
-  ];
-
-  const plotLayout = {
-    paper_bgcolor: "#1a1714",
-    plot_bgcolor: "#1a1714",
-    font: { color: "#e8e0d0" },
-    xaxis: { gridcolor: "#242019", tickcolor: "#9a9080" },
-    yaxis: { gridcolor: "#242019", tickcolor: "#9a9080", title: "plays", rangemode: "tozero" },
-    margin: { t: 40, r: 20, b: 60, l: 50 },
-  };
-
-  function startOfDay() {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString().split("T")[0];
-  }
-
-  function daysAgo(n) {
-    const d = new Date();
-    d.setDate(d.getDate() - n);
-    return d.toISOString().split("T")[0];
-  }
-
-  function buildDates(n) {
-    return Array.from({ length: n }, (_, i) => daysAgo(n - 1 - i));
-  }
-
-  function groupByDay(events) {
-    const counts = {};
-    for (const e of events) {
-      const day = e.timestamp.split("T")[0];
-      counts[day] = (counts[day] || 0) + 1;
+  // ── Color extraction ──────────────────────────────────────────────
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) { h = s = 0; }
+    else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
     }
-    return counts;
+    return [h * 360, s * 100, l * 100];
   }
 
-  function groupByWeek(events) {
-  const counts = {};
-  for (const e of events) {
-    const d = new Date(e.timestamp);
-    const dayOfWeek = d.getUTCDay();
-    const weekStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dayOfWeek));
-    const week = weekStart.toISOString().split("T")[0];
-    counts[week] = (counts[week] || 0) + 1;
-  }
-  return counts;
-}
-
-
-  async function loadChart(r) {
-    range = r;
-    dailyTracks = [];
-
-    if (r === "daily") {
-      const res = await fetch(`/api/events?source=spotify&date_from=${startOfDay()}`);
-      const events = await res.json();
-      dailyTracks = events.map(e => ({
-        time: new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        track: e.metadata.track_name,
-        artist: e.metadata.artist,
-      }));
-      if (chartEl) Plotly.purge(chartEl);
-      return;
+  function hslToRgbStr(h, s, l) {
+    h /= 360; s /= 100; l /= 100;
+    if (s === 0) {
+      const v = Math.round(l * 255);
+      return `rgb(${v},${v},${v})`;
     }
-
-    let events, dates, counts, title;
-
-    if (r === "monthly") {
-      const res = await fetch(`/api/events?source=spotify&date_from=${daysAgo(29)}`);
-      events = await res.json();
-      dates = buildDates(30);
-      counts = groupByDay(events);
-      title = "Spotify — last 30 days";
-    } else if (r === "6m") {
-      const res = await fetch(`/api/events?source=spotify&date_from=${daysAgo(179)}`);
-      events = await res.json();
-      dates = buildDates(180);
-      counts = groupByDay(events);
-      title = "Spotify — last 6 months";
-    } else {
-      const res = await fetch(`/api/events?source=spotify&date_from=${daysAgo(364)}`);
-      events = await res.json();
-      counts = groupByWeek(events);
-      dates = Object.keys(counts).sort();
-      title = "Spotify — last year (by week)";
-    }
-
-    Plotly.react(chartEl, [{
-      x: dates,
-      y: dates.map(d => counts[d] || 0),
-      type: "bar",
-      marker: { color: "#c8813a" },
-    }], { ...plotLayout, title: { text: title, font: { color: "#e8e0d0" } } });
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const r = Math.round(hue2rgb(p, q, h + 1/3) * 255);
+    const g = Math.round(hue2rgb(p, q, h) * 255);
+    const b = Math.round(hue2rgb(p, q, h - 1/3) * 255);
+    return `rgb(${r},${g},${b})`;
   }
 
-  async function fetchNowPlaying() {
-    const res = await fetch("/api/now-playing");
+  function buildTheme(rgb) {
+    if (!rgb) return { ...SPOTIFY_THEME };
+    const [r, g, b] = rgb;
+    const [h, s] = rgbToHsl(r, g, b);
+    if (s < 10) return { ...SPOTIFY_THEME };
+    return {
+      bg:      hslToRgbStr(h, Math.min(s, 25), 7),
+      card:    hslToRgbStr(h, Math.min(s, 25), 13),
+      cardAlt: hslToRgbStr(h, Math.min(s, 25), 20),
+      accent:  hslToRgbStr(h, Math.max(s, 70), 58),
+      border:  hslToRgbStr(h, Math.min(s, 25), 22),
+      muted:   '#9a9080',
+      text:    '#e8e0d0',
+    };
+  }
+
+  async function extractColor(url) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = c.height = 64;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, 64, 64);
+          const { data } = ctx.getImageData(0, 0, 64, 64);
+          let bestColor = null, bestScore = -1;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i+1], b = data[i+2];
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            const brightness = max / 255;
+            const sat = max === 0 ? 0 : (max - min) / max;
+            const score = sat * Math.max(0, 1 - Math.abs(brightness - 0.55) * 1.5);
+            if (score > bestScore) { bestScore = score; bestColor = [r, g, b]; }
+          }
+          resolve(bestColor);
+        } catch { resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  }
+
+  async function pollNowPlaying() {
+    const res = await fetch('/api/now-playing');
     nowPlaying = await res.json();
+    const cover = nowPlaying?.cover ?? null;
+    if (cover !== lastCover) {
+      lastCover = cover;
+      const rgb = cover ? await extractColor(cover) : null;
+      musicTheme.set(buildTheme(rgb));
+    }
   }
 
-  onMount(async () => {
-    const [plRes] = await Promise.all([
-      fetch("/api/playlists"),
-      loadChart("monthly"),
-      fetchNowPlaying(),
-    ]);
-    playlists = (await plRes.json()).sort((a, b) => a.name.localeCompare(b.name));
-    setInterval(fetchNowPlaying, 10000);
-  });
+  async function runBackfill() {
+    if (!backfillDate) return;
+    backfillStatus = 'running…';
+    const res = await fetch('/api/backfill/spotify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date_from: backfillDate }),
+    });
+    const data = await res.json();
+    backfillStatus = `${data.count} new events`;
+  }
+
+  onMount(() => { pollNowPlaying(); timer = setInterval(pollNowPlaying, 10000); });
+  onDestroy(() => { clearInterval(timer); musicTheme.set({ ...SPOTIFY_THEME }); });
 </script>
 
-<main class="p-8 bg-[#1a1714] min-h-screen text-[#e8e0d0]">
-  <h1 class="text-3xl font-semibold mb-8">Music</h1>
-
-  <div class="flex items-center justify-between mb-8">
-    {#if nowPlaying}
-      <div class="flex items-center gap-4 p-4 rounded-xl bg-[#242019]">
-        {#if nowPlaying.cover}
-          <img src={nowPlaying.cover} alt="album art" class="w-16 h-16 rounded-lg" />
-        {/if}
-        <div>
-          <div class="text-base font-semibold">{nowPlaying.track}</div>
-          <div class="text-sm text-[#9a9080]">{nowPlaying.artist}</div>
-          <div class="text-xs text-[#9a9080] mt-1">{nowPlaying.album}</div>
-        </div>
-      </div>
-    {:else}
-      <div></div>
-    {/if}
+<main
+  style="
+    background: linear-gradient(160deg, {$musicTheme.cardAlt} 0%, {$musicTheme.bg} 35%);
+    color: {$musicTheme.text};
+    transition: background 0.8s ease;
+  "
+  class="p-8 min-h-screen"
+>
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-3xl font-semibold">Music</h1>
     <div class="flex items-center gap-2">
       <input
         type="date"
         bind:value={backfillDate}
-        class="bg-[#242019] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]"
+        style="background:{$musicTheme.card}; border:1px solid {$musicTheme.border}; color:{$musicTheme.text}"
+        class="rounded-lg px-3 py-2 text-sm outline-none"
       />
       <button
-        on:click={async () => {
-          if (!backfillDate) return;
-          backfillStatus = "running…";
-          const res = await fetch("/api/backfill/spotify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ date_from: backfillDate }),
-          });
-          const data = await res.json();
-          backfillStatus = `${data.count} new events`;
-        }}
-        class="bg-[#c8813a] hover:bg-[#b5722e] text-[#1a1714] font-medium px-4 py-2 rounded-lg text-sm"
-      >
-        Backfill
-      </button>
+        on:click={runBackfill}
+        style="background:{$musicTheme.accent}; color:{$musicTheme.bg}"
+        class="font-medium px-4 py-2 rounded-lg text-sm"
+      >Backfill</button>
       {#if backfillStatus}
-        <span class="text-sm text-[#9a9080]">{backfillStatus}</span>
+        <span class="text-sm" style="color:{$musicTheme.muted}">{backfillStatus}</span>
       {/if}
     </div>
   </div>
 
-  <div class="flex gap-2 mb-4">
-    {#each RANGES as r}
-      <button
-        on:click={() => loadChart(r.key)}
-        class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors
-          {range === r.key ? 'bg-[#c8813a] text-[#1a1714]' : 'bg-[#242019] text-[#9a9080] hover:text-[#e8e0d0]'}"
-      >
-        {r.label}
-      </button>
-    {/each}
-  </div>
-
-  {#if range === "daily"}
-    <div class="flex flex-col gap-2 max-w-xl">
-      {#each dailyTracks as t}
-        <div class="flex items-center gap-4 px-4 py-2 rounded-lg bg-[#242019]">
-          <span class="text-xs text-[#9a9080] w-12 shrink-0">{t.time}</span>
-          <span class="text-sm font-medium truncate">{t.track}</span>
-          <span class="text-xs text-[#9a9080] truncate">{t.artist}</span>
-        </div>
-      {:else}
-        <p class="text-[#9a9080] text-sm">No plays yet today.</p>
-      {/each}
+  <!-- Bento grid -->
+  <div class="grid gap-4" style="
+    grid-template-columns: repeat(10, 1fr);
+    grid-template-rows: 110px 720px 300px auto;
+  ">
+    <!-- Streak: 70% width, row 1 -->
+    <div style="grid-column:1/8; grid-row:1">
+      <MusicStreak />
     </div>
-  {:else}
-    <div bind:this={chartEl}></div>
-  {/if}
 
-  <h2 class="text-xl font-semibold mt-10 mb-4">Playlists</h2>
-  <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4">
-    {#each playlists as p}
-      <div class="bg-[#242019] rounded-xl overflow-hidden">
-        {#if p.cover}
-          <img src={p.cover} alt={p.name} class="w-full aspect-square object-cover" />
-        {/if}
-        <div class="p-3">
-          <div class="text-sm font-medium truncate">{p.name}</div>
-          <div class="text-xs text-[#9a9080] mt-1">{p.track_count} tracks</div>
-        </div>
-      </div>
-    {/each}
+    <!-- Now Playing Card: 30% width, spans rows 1–2 -->
+    <div style="grid-column:8/11; grid-row:1/3">
+      <MusicNowPlayingCard {nowPlaying} />
+    </div>
+
+    <!-- Top Tracks: ~40%, row 2 -->
+    <div style="grid-column:1/5; grid-row:2">
+      <MusicTopTracks />
+    </div>
+
+    <!-- Top Artists: ~30%, row 2 -->
+    <div style="grid-column:5/8; grid-row:2">
+      <MusicTopArtists />
+    </div>
+
+    <!-- Heatmap: 50%, row 3 -->
+    <div style="grid-column:1/6; grid-row:3">
+      <MusicHeatmap />
+    </div>
+
+    <!-- Plays chart: 50%, row 3 -->
+    <div style="grid-column:6/11; grid-row:3">
+      <MusicPlaysChart />
+    </div>
+
+    <!-- Playlists: full width, row 4 -->
+    <div style="grid-column:1/11; grid-row:4">
+      <MusicPlaylists />
+    </div>
   </div>
 </main>

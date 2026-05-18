@@ -1,104 +1,112 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import Plotly from 'plotly.js-dist-min';
+  import { musicTheme } from '../musicTheme.js';
+  import { get } from 'svelte/store';
+  import { daysAgoIST, buildDatesIST, groupByDayIST, groupByWeekIST, istTime } from '../ist.js';
 
   let el;
   let range = 'monthly';
+  let dailyTracks = [];
+  let cachedEvents = [];
+  let cachedRange  = null;
+  let unsubTheme;
 
   const RANGES = [
-    { key: 'daily',   label: 'Today',    n: 0 },
-    { key: 'monthly', label: '30 days',  n: 30 },
-    { key: '6m',      label: '6 months', n: 180 },
-    { key: 'yearly',  label: 'Year',     n: 365 },
+    { key: 'daily',   label: 'Today' },
+    { key: 'monthly', label: '30 days' },
+    { key: '6m',      label: '6 months' },
+    { key: 'yearly',  label: 'Year' },
   ];
 
-  function daysAgo(n) {
-    const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0];
+  function plotLayout(theme) {
+    return {
+      paper_bgcolor: theme.bg,
+      plot_bgcolor:  theme.bg,
+      font:   { color: theme.text },
+      xaxis:  { gridcolor: 'transparent', tickcolor: theme.muted, showgrid: false },
+      yaxis:  { gridcolor: 'transparent', tickcolor: theme.muted, showgrid: false, rangemode: 'tozero' },
+      margin: { t: 10, r: 20, b: 60, l: 50 },
+    };
   }
-  function buildDates(n) {
-    return Array.from({ length: n }, (_, i) => daysAgo(n - 1 - i));
-  }
-  function groupByDay(evs) {
-    const c = {};
-    for (const e of evs) { const d = e.timestamp.split('T')[0]; c[d] = (c[d] || 0) + 1; }
-    return c;
-  }
-  function groupByWeek(evs) {
-    const c = {};
-    for (const e of evs) {
-      const d = new Date(e.timestamp);
-      const ws = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - d.getUTCDay()));
-      const w = ws.toISOString().split('T')[0];
-      c[w] = (c[w] || 0) + 1;
+
+  function drawChart() {
+    if (!el || cachedRange === 'daily' || !cachedEvents.length) return;
+    const theme = get(musicTheme);
+    let dates, counts;
+    if (cachedRange === 'monthly') {
+      dates = buildDatesIST(30); counts = groupByDayIST(cachedEvents);
+    } else if (cachedRange === '6m') {
+      dates = buildDatesIST(180); counts = groupByDayIST(cachedEvents);
+    } else {
+      counts = groupByWeekIST(cachedEvents); dates = Object.keys(counts).sort();
     }
-    return c;
+    Plotly.react(
+      el,
+      [{ x: dates, y: dates.map(d => counts[d] || 0), type: 'bar', marker: { color: theme.accent } }],
+      plotLayout(theme),
+    );
   }
-
-  const layout = {
-    paper_bgcolor: '#1a1714', plot_bgcolor: '#1a1714',
-    font: { color: '#e8e0d0' },
-    xaxis: { gridcolor: '#242019', tickcolor: '#9a9080' },
-    yaxis: { gridcolor: '#242019', tickcolor: '#9a9080', title: 'plays', rangemode: 'tozero' },
-    margin: { t: 10, r: 20, b: 60, l: 50 },
-  };
-
-  let dailyTracks = [];
 
   async function loadChart(r) {
     range = r;
+    cachedRange = r;
     dailyTracks = [];
+
     if (r === 'daily') {
-      const res = await fetch(`/api/events?source=spotify&date_from=${daysAgo(0)}`);
-      const evs = await res.json();
-      dailyTracks = evs.map(e => ({
-        time: new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        track: e.metadata.track_name, artist: e.metadata.artist,
+      const evs = await (await fetch(`/api/events?source=spotify&date_from=${daysAgoIST(0)}`)).json();
+      cachedEvents = evs;
+      dailyTracks  = evs.map(e => ({
+        time:   istTime(e.timestamp),
+        track:  e.metadata.track_name,
+        artist: e.metadata.artist,
       }));
       if (el) Plotly.purge(el);
       return;
     }
-    let evs, dates, counts, title;
-    if (r === 'monthly') {
-      evs = await (await fetch(`/api/events?source=spotify&date_from=${daysAgo(29)}`)).json();
-      dates = buildDates(30); counts = groupByDay(evs); title = 'Spotify — last 30 days';
-    } else if (r === '6m') {
-      evs = await (await fetch(`/api/events?source=spotify&date_from=${daysAgo(179)}`)).json();
-      dates = buildDates(180); counts = groupByDay(evs); title = 'Spotify — last 6 months';
-    } else {
-      evs = await (await fetch(`/api/events?source=spotify&date_from=${daysAgo(364)}`)).json();
-      counts = groupByWeek(evs); dates = Object.keys(counts).sort(); title = 'Spotify — last year';
-    }
-    Plotly.react(el, [{ x: dates, y: dates.map(d => counts[d] || 0), type: 'bar', marker: { color: '#c8813a' } }],
-      { ...layout, title: { text: title, font: { color: '#e8e0d0', size: 12 } } });
+
+    const n = r === 'monthly' ? 29 : r === '6m' ? 179 : 364;
+    cachedEvents = await (await fetch(`/api/events?source=spotify&date_from=${daysAgoIST(n)}`)).json();
+    drawChart();
   }
 
-  onMount(() => loadChart('monthly'));
-  onDestroy(() => { if (el) Plotly.purge(el); });
+  onMount(async () => {
+    await loadChart('monthly');
+    unsubTheme = musicTheme.subscribe(() => drawChart());
+  });
+
+  onDestroy(() => {
+    unsubTheme?.();
+    if (el) Plotly.purge(el);
+  });
 </script>
 
-<div class="bg-[#242019] rounded-xl p-4 w-full">
-  <div class="flex items-center gap-2 mb-3">
-    <div class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider flex-1">Plays</div>
+<div style="background:{$musicTheme.card}" class="rounded-xl p-4 h-full flex flex-col">
+  <div class="flex items-center gap-2 justify-end mb-3">
     {#each RANGES as r}
       <button
         on:click={() => loadChart(r.key)}
-        class="px-2 py-0.5 rounded text-xs {range === r.key ? 'bg-[#c8813a] text-[#1a1714]' : 'text-[#9a9080] hover:text-[#e8e0d0]'}"
+        style="{range === r.key
+          ? `background:${$musicTheme.accent};color:${$musicTheme.bg}`
+          : `color:${$musicTheme.muted}`}"
+        class="px-2 py-0.5 rounded text-xs"
       >{r.label}</button>
     {/each}
   </div>
+
   {#if range === 'daily'}
-    <div class="flex flex-col gap-1 max-h-64 overflow-y-auto">
+    <div class="flex flex-col gap-1 overflow-y-auto flex-1" style="scrollbar-width:none; -ms-overflow-style:none">
       {#each dailyTracks as t}
-        <div class="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-[#1a1714]">
-          <span class="text-xs text-[#9a9080] w-10 shrink-0">{t.time}</span>
-          <span class="text-sm truncate">{t.track}</span>
-          <span class="text-xs text-[#9a9080] truncate">{t.artist}</span>
+        <div class="flex items-center gap-3 px-3 py-1.5 rounded-lg" style="background:{$musicTheme.bg}">
+          <span class="text-xs w-10 shrink-0" style="color:{$musicTheme.muted}">{t.time}</span>
+          <span class="text-sm truncate" style="color:{$musicTheme.text}">{t.track}</span>
+          <span class="text-xs truncate" style="color:{$musicTheme.muted}">{t.artist}</span>
         </div>
       {:else}
-        <p class="text-sm text-[#9a9080]">No plays yet today.</p>
+        <p class="text-sm" style="color:{$musicTheme.muted}">No plays yet today.</p>
       {/each}
     </div>
   {:else}
-    <div bind:this={el}></div>
+    <div bind:this={el} class="flex-1"></div>
   {/if}
 </div>

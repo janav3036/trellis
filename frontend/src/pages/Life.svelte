@@ -1,6 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import { blur } from "svelte/transition";
+    import { istDate, todayIST, fmtDate } from "../lib/ist.js";
 
     let calendarEvents = [];
     let backfillDate = "";
@@ -124,10 +125,7 @@
         if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
         const days = Math.floor(secs / 86400);
         if (days < 30) return `${days}d ago`;
-        return new Date(ts).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-        });
+        return fmtDate(ts);
     }
 
     function prevMonth() {
@@ -173,7 +171,7 @@
     $: eventsByDate = (() => {
         const map = {};
         for (const e of calendarEvents) {
-            const key = e.timestamp.slice(0, 10);
+            const key = istDate(e.timestamp);
             if (!map[key]) map[key] = [];
             map[key].push(e);
         }
@@ -192,14 +190,14 @@
                     (s, e) => s + (e.metadata.duration_minutes || 0),
                     0,
                 ) / 60,
-            days: new Set(evs.map((e) => e.timestamp.slice(0, 10))).size,
+            days: new Set(evs.map((e) => istDate(e.timestamp))).size,
         };
     })();
 
     $: meetupsByDate = (() => {
         const map = {};
         for (const e of peopleEvents) {
-            const key = e.timestamp.slice(0, 10);
+            const key = istDate(e.timestamp);
             if (!map[key]) map[key] = [];
             map[key].push(e);
         }
@@ -356,6 +354,7 @@
                         {new Date(selectedDay + "T12:00:00").toLocaleDateString(
                             "en-US",
                             {
+                                timeZone: "Asia/Kolkata",
                                 weekday: "long",
                                 month: "long",
                                 day: "numeric",
@@ -852,6 +851,7 @@
                                                 {new Date(
                                                     e.timestamp,
                                                 ).toLocaleDateString("en-US", {
+                                                    timeZone: "Asia/Kolkata",
                                                     month: "short",
                                                     day: "numeric",
                                                     year: "numeric",
@@ -901,6 +901,7 @@
                             {new Date(date + "T12:00:00").toLocaleDateString(
                                 "en-US",
                                 {
+                                    timeZone: "Asia/Kolkata",
                                     weekday: "long",
                                     month: "long",
                                     day: "numeric",
@@ -1211,6 +1212,7 @@
                         Watched {new Date(
                             expandedMovie.timestamp,
                         ).toLocaleDateString("en-US", {
+                            timeZone: "Asia/Kolkata",
                             month: "long",
                             day: "numeric",
                             year: "numeric",

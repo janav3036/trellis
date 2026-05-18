@@ -1,5 +1,37 @@
 <script>
   import { onMount } from 'svelte';
+  import { todayIST } from '../ist.js';
+
+  export let theme = 'home';
+
+  $: c = theme === 'f1' ? {
+    bg:        '#18181c',
+    input:     '#0d0d0f',
+    hover:     '#1a1a22',
+    accent:    '#e8002d',
+    text:      '#f0f0f2',
+    muted:     '#666',
+    dim:       '#444',
+    vdim:      '#333',
+    border:    '#2a2a35',
+    del:       '#e05555',
+    svgMain:   '#333',
+    svgDim:    '#222',
+  } : {
+    bg:        '#242019',
+    input:     '#1a1714',
+    hover:     '#2e2a24',
+    accent:    '#c8813a',
+    text:      '#e8e0d0',
+    muted:     '#9a9080',
+    dim:       '#6a6058',
+    vdim:      '#5a5040',
+    border:    '#3a3530',
+    del:       '#c87a7a',
+    svgMain:   '#6a6058',
+    svgDim:    '#4a4038',
+  };
+
   let season = '', nextRace = null, daysAway = null;
   let racePhotos = [], showUpload = false, selectedPhoto = null;
   let uploadRound = '', uploadCaption = '', uploadUrl = '', uploadUploading = false, uploadError = '';
@@ -17,7 +49,6 @@
     return `In ${days} days`;
   }
 
-  // Flat list ordered by round descending (most recent first)
   $: allPhotos = [...racePhotos].sort((a, b) => b.round - a.round);
   let photoIdx = 0;
   $: if (allPhotos.length && photoIdx >= allPhotos.length) photoIdx = 0;
@@ -55,7 +86,7 @@
         race_name: race?.name || '',
         url: uploadUrl,
         caption: uploadCaption,
-        date: race?.date || new Date().toISOString().slice(0, 10),
+        date: race?.date || todayIST(),
       }),
     });
     uploadUrl = ''; uploadCaption = ''; showUpload = false;
@@ -72,7 +103,7 @@
     const data = await res.json();
     season = data.season;
     races = data.races;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIST();
     nextRace = data.races.find(r => !r.completed) || null;
     if (nextRace) {
       daysAway = Math.ceil((new Date(nextRace.date) - new Date(today)) / 86400000);
@@ -85,32 +116,40 @@
   });
 </script>
 
-<div class="bg-[#242019] rounded-xl p-4 h-full flex flex-col overflow-hidden">
+<div class="rounded-xl p-4 h-full flex flex-col overflow-hidden"
+     style="background:{c.bg}; color:{c.text}">
+
   <!-- Header -->
   <div class="flex items-center justify-between shrink-0 mb-2">
     <a href="/#/f1"
-       class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider hover:text-[#e8e0d0] transition-colors">
+       class="text-xs font-semibold uppercase tracking-wider transition-colors"
+       style="color:{c.muted}"
+       on:mouseenter={e => e.target.style.color = c.text}
+       on:mouseleave={e => e.target.style.color = c.muted}>
       F1 {season} · Next Race
     </a>
     <button on:click={() => showUpload = !showUpload}
-      class="text-xs text-[#9a9080] hover:text-[#e8e0d0] transition-colors">+</button>
+      class="text-xs transition-colors"
+      style="color:{c.muted}"
+      on:mouseenter={e => e.target.style.color = c.text}
+      on:mouseleave={e => e.target.style.color = c.muted}>+</button>
   </div>
 
   <!-- Next race info -->
   {#if nextRace}
     <div class="shrink-0">
       <div class="text-base font-semibold leading-tight">{nextRace.name}</div>
-      <div class="text-xs text-[#9a9080]">{nextRace.circuit} · {nextRace.country}</div>
+      <div class="text-xs mt-0.5" style="color:{c.muted}">{nextRace.circuit} · {nextRace.country}</div>
       <div class="flex items-center gap-2 mt-0.5">
-        <span class="text-xs text-[#9a9080]">{fmt(nextRace.date)}</span>
-        <span class="text-xs font-medium" style="color: var(--accent, #c8813a)">{countdown(daysAway)}</span>
+        <span class="text-xs" style="color:{c.muted}">{fmt(nextRace.date)}</span>
+        <span class="text-xs font-medium" style="color:{c.accent}">{countdown(daysAway)}</span>
       </div>
     </div>
   {:else}
-    <p class="text-sm text-[#9a9080] shrink-0">Season complete</p>
+    <p class="text-sm shrink-0" style="color:{c.muted}">Season complete</p>
   {/if}
 
-  <!-- Race photos: indexed single photo with arrow nav -->
+  <!-- Race photos -->
   {#if allPhotos.length > 0}
     {@const photo = allPhotos[photoIdx]}
     <div class="flex-1 min-h-0 mt-3 flex flex-col gap-1">
@@ -129,31 +168,36 @@
           {/if}
         </div>
         <button on:click={() => deletePhoto(photo.id)}
-          class="absolute top-1.5 right-1.5 bg-black/60 text-[#c87a7a] text-[10px]
-                 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+          class="absolute top-1.5 right-1.5 text-[10px] px-1.5 py-0.5 rounded
+                 opacity-0 group-hover:opacity-100 transition-opacity"
+          style="background:rgba(0,0,0,0.6); color:{c.del}">✕</button>
       </div>
       <!-- Navigation -->
       <div class="flex items-center justify-center gap-3 shrink-0">
         <button on:click={() => photoIdx = (photoIdx - 1 + allPhotos.length) % allPhotos.length}
-          class="text-[#9a9080] hover:text-[#e8e0d0] text-xs px-2">‹</button>
-        <span class="text-[10px] text-[#6a6058]">{photoIdx + 1} / {allPhotos.length}</span>
+          class="text-xs px-2 transition-colors" style="color:{c.muted}"
+          on:mouseenter={e => e.target.style.color = c.text}
+          on:mouseleave={e => e.target.style.color = c.muted}>‹</button>
+        <span class="text-[10px]" style="color:{c.dim}">{photoIdx + 1} / {allPhotos.length}</span>
         <button on:click={() => photoIdx = (photoIdx + 1) % allPhotos.length}
-          class="text-[#9a9080] hover:text-[#e8e0d0] text-xs px-2">›</button>
+          class="text-xs px-2 transition-colors" style="color:{c.muted}"
+          on:mouseenter={e => e.target.style.color = c.text}
+          on:mouseleave={e => e.target.style.color = c.muted}>›</button>
       </div>
     </div>
   {:else}
-    <!-- SVG track placeholder when no photos -->
+    <!-- SVG track placeholder -->
     <div class="flex-1 flex items-center justify-center min-h-0 mt-2">
       <svg viewBox="0 0 220 110" class="w-full max-h-full opacity-50" xmlns="http://www.w3.org/2000/svg">
         <path d="M 35 80 Q 12 80 12 58 Q 12 22 50 22 L 145 22 Q 178 22 196 40
                  L 206 58 Q 206 80 188 80 L 110 80 Q 92 80 92 64 Q 92 52 110 52
                  L 168 52 Q 178 52 178 62"
-              fill="none" stroke="#6a6058" stroke-width="8"
+              fill="none" stroke={c.svgMain} stroke-width="8"
               stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M 50 48 Q 50 36 62 36 L 100 36"
-              fill="none" stroke="#4a4038" stroke-width="4"
+              fill="none" stroke={c.svgDim} stroke-width="4"
               stroke-linecap="round"/>
-        <line x1="35" y1="74" x2="35" y2="86" stroke="#c8813a" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="35" y1="74" x2="35" y2="86" stroke={c.accent} stroke-width="2.5" stroke-linecap="round"/>
       </svg>
     </div>
   {/if}
@@ -161,24 +205,32 @@
 
 <!-- Photo lightbox -->
 {#if selectedPhoto}
-  <div class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-8"
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-8"
+       style="background:rgba(0,0,0,0.85)"
        on:click={() => selectedPhoto = null}>
-    <div class="bg-[#242019] rounded-2xl overflow-hidden max-w-lg w-full shadow-2xl"
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="rounded-2xl overflow-hidden max-w-lg w-full shadow-2xl"
+         style="background:{c.bg}"
          on:click|stopPropagation>
       <img src={selectedPhoto.url} alt={selectedPhoto.caption || selectedPhoto.race_name}
-           class="w-full max-h-[70vh] object-contain bg-black" />
+           class="w-full max-h-[70vh] object-contain" style="background:#000" />
       <div class="px-5 py-4 flex items-start justify-between gap-4">
         <div>
-          <div class="text-sm font-semibold">{selectedPhoto.race_name || `Round ${selectedPhoto.round}`}</div>
+          <div class="text-sm font-semibold" style="color:{c.text}">
+            {selectedPhoto.race_name || `Round ${selectedPhoto.round}`}
+          </div>
           {#if selectedPhoto.caption}
-            <p class="text-sm text-[#9a9080] mt-1">{selectedPhoto.caption}</p>
+            <p class="text-sm mt-1" style="color:{c.muted}">{selectedPhoto.caption}</p>
           {/if}
         </div>
         <div class="flex items-center gap-3 shrink-0">
           <button on:click={async () => { await deletePhoto(selectedPhoto.id); selectedPhoto = null; }}
-            class="text-xs text-[#c87a7a] hover:text-[#e87a7a]">Delete</button>
+            class="text-xs" style="color:{c.del}">Delete</button>
           <button on:click={() => selectedPhoto = null}
-            class="text-[#9a9080] hover:text-[#e8e0d0]">✕</button>
+            class="text-lg leading-none" style="color:{c.muted}">✕</button>
         </div>
       </div>
     </div>
@@ -187,16 +239,23 @@
 
 <!-- Upload modal -->
 {#if showUpload}
-  <div class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6"
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-6"
+       style="background:rgba(0,0,0,0.85)"
        on:click={() => showUpload = false}>
-    <div class="bg-[#242019] rounded-2xl p-5 w-full max-w-sm flex flex-col gap-3 shadow-2xl"
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="rounded-2xl p-5 w-full max-w-sm flex flex-col gap-3 shadow-2xl"
+         style="background:{c.bg}"
          on:click|stopPropagation>
-      <div class="text-sm font-semibold">Add Race Photos</div>
+      <div class="text-sm font-semibold" style="color:{c.text}">Add Race Photos</div>
 
       <div class="flex flex-col gap-1">
-        <label class="text-xs text-[#9a9080]">Race</label>
+        <label class="text-xs" style="color:{c.muted}">Race</label>
         <select bind:value={uploadRound}
-          class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]">
+          class="rounded-lg px-3 py-2 text-sm"
+          style="background:{c.input}; color:{c.text}; border:1px solid {c.border}">
           {#each races as r}
             <option value={String(r.round)}>Round {r.round} · {r.name}</option>
           {/each}
@@ -204,32 +263,37 @@
       </div>
 
       <div class="flex flex-col gap-1">
-        <label class="text-xs text-[#9a9080]">Image</label>
+        <label class="text-xs" style="color:{c.muted}">Image</label>
         <input type="file" accept="image/*" on:change={handleFileChange}
-          class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]" />
+          class="rounded-lg px-3 py-2 text-sm"
+          style="background:{c.input}; color:{c.text}; border:1px solid {c.border}" />
         {#if uploadUploading}
-          <p class="text-xs text-[#9a9080] animate-pulse">Uploading…</p>
+          <p class="text-xs animate-pulse" style="color:{c.muted}">Uploading…</p>
         {:else if uploadError}
-          <p class="text-xs text-[#c87a7a]">{uploadError}</p>
+          <p class="text-xs" style="color:{c.del}">{uploadError}</p>
         {:else if uploadUrl}
           <img src={uploadUrl} alt="preview" class="h-24 w-full object-cover rounded-lg mt-1" />
         {/if}
       </div>
 
       <div class="flex flex-col gap-1">
-        <label class="text-xs text-[#9a9080]">Caption <span class="text-[#5a5040]">(optional)</span></label>
+        <label class="text-xs" style="color:{c.muted}">
+          Caption <span style="color:{c.vdim}">(optional)</span>
+        </label>
         <input type="text" bind:value={uploadCaption} placeholder="Podium at Monaco…"
-          class="bg-[#1a1714] text-[#e8e0d0] rounded-lg px-3 py-2 text-sm border border-[#3a3530]" />
+          class="rounded-lg px-3 py-2 text-sm"
+          style="background:{c.input}; color:{c.text}; border:1px solid {c.border}" />
       </div>
 
       <div class="flex gap-2">
         <button on:click={submitPhoto} disabled={!uploadUrl || !uploadRound}
-          class="bg-[#c8813a] hover:bg-[#d8914a] disabled:opacity-40 text-[#1a1714] font-medium
-                 px-4 py-2 rounded-lg text-sm flex-1">
+          class="font-medium px-4 py-2 rounded-lg text-sm flex-1 disabled:opacity-40"
+          style="background:{c.accent}; color:{theme === 'f1' ? '#fff' : c.input}">
           Save
         </button>
         <button on:click={() => showUpload = false}
-          class="bg-[#1a1714] hover:bg-[#2a2520] text-[#9a9080] px-4 py-2 rounded-lg text-sm">
+          class="px-4 py-2 rounded-lg text-sm"
+          style="background:{c.input}; color:{c.muted}">
           Cancel
         </button>
       </div>

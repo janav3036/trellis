@@ -1,8 +1,9 @@
 <script>
   import { onMount } from 'svelte';
+  import { todayIST, istDate, fmtDate } from '../ist.js';
   let summary = [], events = [], expandedPerson = null;
   let showForm = false;
-  let meetupDate = new Date().toISOString().slice(0,10);
+  let meetupDate = todayIST();
   let meetupNotes = '';
   let meetupPeople = [{ name: '', tag: 'Friend' }];
   let status = '';
@@ -10,7 +11,7 @@
   function groupEvents(evs) {
     const map = new Map();
     for (const e of evs) {
-      const key = `${e.timestamp.slice(0,10)}::${(e.metadata.notes||'').trim()}`;
+      const key = `${istDate(e.timestamp)}::${(e.metadata.notes||'').trim()}`;
       if (!map.has(key)) map.set(key, { ...e, metadata: { ...e.metadata, people: [] } });
       const g = map.get(key);
       for (const p of (e.metadata.people || [])) {
@@ -25,7 +26,7 @@
     if (s<3600) return `${Math.floor(s/60)}m ago`;
     if (s<86400) return `${Math.floor(s/3600)}h ago`;
     const d=Math.floor(s/86400); if(d<30) return `${d}d ago`;
-    return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return fmtDate(ts);
   }
   async function load() {
     const [evRes, sumRes] = await Promise.all([
@@ -125,7 +126,7 @@
               {#each history as e}
                 <div class="flex items-start gap-2">
                   <span class="text-xs text-[#9a9080] shrink-0">
-                    {new Date(e.timestamp).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                    {fmtDate(e.timestamp, {month:'short',day:'numeric',year:'numeric'})}
                   </span>
                   <span class="text-xs text-[#c8c0b0] flex-1">{e.metadata.notes||'—'}</span>
                   <button on:click={async()=>{await fetch(`/api/events/${e.id}`,{method:'DELETE'});load();}}

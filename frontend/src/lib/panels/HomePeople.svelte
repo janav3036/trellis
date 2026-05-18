@@ -1,11 +1,12 @@
 <script>
   import { onMount } from 'svelte';
+  import { istDate, fmtDate } from '../ist.js';
   let events = [], expanded = null;
 
   function groupEvents(evs) {
     const map = new Map();
     for (const e of evs) {
-      const key = `${e.timestamp.slice(0,10)}::${(e.metadata.notes||'').trim()}`;
+      const key = `${istDate(e.timestamp)}::${(e.metadata.notes||'').trim()}`;
       if (!map.has(key)) map.set(key, { ...e, metadata: { ...e.metadata, people: [] } });
       const g = map.get(key);
       for (const p of (e.metadata.people || [])) {
@@ -21,7 +22,7 @@
     if (s < 86400)  return `${Math.floor(s / 3600)}h ago`;
     const d = Math.floor(s / 86400);
     if (d < 30)     return `${d}d ago`;
-    return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return fmtDate(ts);
   }
 
   onMount(async () => {

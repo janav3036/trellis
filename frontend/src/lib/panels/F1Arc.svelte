@@ -3,7 +3,8 @@
   import Plotly from 'plotly.js-dist-min';
 
   let el;
-  const COLORS = ['#c8813a','#4dabf7','#69db7c','#ffd43b','#f783ac'];
+  // Ferrari red, McLaren orange, Mercedes teal, Red Bull blue, Alpine yellow
+  const COLORS = ['#e8002d', '#FF8000', '#27F4D2', '#3671C6', '#E8D60A'];
 
   onMount(async () => {
     const r = await fetch('/api/f1/season-arc');
@@ -17,19 +18,21 @@
         marker: { size: 5 },
       })),
       {
-        paper_bgcolor: '#242019', plot_bgcolor: '#242019',
-        font: { color: '#e8e0d0' },
-        xaxis: { gridcolor: '#1a1714', tickangle: -45, tickfont: { size: 9 } },
-        yaxis: { gridcolor: '#1a1714', title: 'Points' },
-        legend: { bgcolor: '#242019' },
-        margin: { t: 10, r: 20, b: 100, l: 60 },
-      }
+        autosize: true,
+        paper_bgcolor: '#18181c', plot_bgcolor: '#18181c',
+        font: { color: '#888', family: 'inherit' },
+        xaxis: { showgrid: false, zeroline: false, tickangle: -45, tickfont: { size: 9 }, color: '#555' },
+        yaxis: { showgrid: false, zeroline: false, title: '', tickfont: { size: 9 }, color: '#555' },
+        legend: { bgcolor: 'transparent', orientation: 'h', y: -0.25, font: { size: 10 } },
+        margin: { t: 10, r: 20, b: 60, l: 40 },
+      },
+      { responsive: true }
     );
   });
   onDestroy(() => { if (el) Plotly.purge(el); });
 </script>
 
-<div class="bg-[#242019] rounded-xl p-4 w-full">
-  <div class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3">Championship Arc — Top 5</div>
-  <div bind:this={el}></div>
+<div class="rounded-xl p-4 w-full h-full flex flex-col" style="background:#18181c">
+  <div class="text-xs font-bold uppercase tracking-widest mb-2 shrink-0" style="color:#444">Championship Arc — Top 5</div>
+  <div bind:this={el} class="flex-1 min-h-0"></div>
 </div>

@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { istDate } from '../ist.js';
 
   let calendarEvents = [];
   const today = new Date();
@@ -48,7 +49,7 @@
   $: eventsByDate = (() => {
     const map = {};
     for (const e of calendarEvents) {
-      const key = e.timestamp.slice(0,10);
+      const key = istDate(e.timestamp);
       if (!map[key]) map[key] = [];
       map[key].push(e);
     }
