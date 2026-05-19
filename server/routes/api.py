@@ -186,7 +186,7 @@ def weather_forecast():
         "latitude": ingester.lat,
         "longitude": ingester.lon,
         "forecast_days": 14,
-        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode,windspeed_10m_max",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode,windspeed_10m_max,apparent_temperature_max,apparent_temperature_min,uv_index_max,sunrise,sunset,windgusts_10m_max",
         "timezone": "auto"
     })
     resp.raise_for_status()
@@ -199,7 +199,13 @@ def weather_forecast():
                 "temp_min": daily["temperature_2m_min"][i],
                 "precipitation": daily["precipitation_sum"][i],
                 "weathercode": daily["weathercode"][i],
-                "windspeed_max": daily["windspeed_10m_max"][i]
+                "windspeed_max": daily["windspeed_10m_max"][i],
+                "feels_like_max": daily["apparent_temperature_max"][i],
+                "feels_like_min": daily["apparent_temperature_min"][i],
+                "uv_index": daily["uv_index_max"][i],
+                "sunrise": daily["sunrise"][i],
+                "sunset": daily["sunset"][i],
+                "windgusts_max": daily["windgusts_10m_max"][i],
             }
         }
         for i, day in enumerate(daily["time"])
