@@ -19,3 +19,12 @@ CREATE TABLE IF NOT EXISTS habits (
     color      TEXT NOT NULL DEFAULT '#6b9e6b',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS ideas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    text        TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'active',
+    repo        TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+

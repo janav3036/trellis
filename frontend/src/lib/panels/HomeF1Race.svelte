@@ -37,6 +37,53 @@
   let uploadRound = '', uploadCaption = '', uploadUrl = '', uploadUploading = false, uploadError = '';
   let races = [];
 
+  // ── drag-to-reposition ───────────────────────────────────────────────────────
+  let positionY    = 50;
+  let isDragging   = false;
+  let hasDragged   = false;
+  let dragStartY   = 0;
+  let dragStartPos = 50;
+  let containerEl;
+
+  const POS_KEY = 'f1-photo-positions';
+
+  function loadPosition(id) {
+    try { return JSON.parse(localStorage.getItem(POS_KEY) || '{}')[id] ?? 50; }
+    catch { return 50; }
+  }
+
+  function savePosition(id, y) {
+    try {
+      const map = JSON.parse(localStorage.getItem(POS_KEY) || '{}');
+      map[id] = y;
+      localStorage.setItem(POS_KEY, JSON.stringify(map));
+    } catch {}
+  }
+
+  $: if (allPhotos.length) positionY = loadPosition(allPhotos[photoIdx]?.id);
+
+  function onDragStart(e) {
+    isDragging  = true;
+    hasDragged  = false;
+    dragStartY  = e.clientY;
+    dragStartPos = positionY;
+    e.preventDefault();
+  }
+
+  function onDragMove(e) {
+    if (!isDragging || !containerEl) return;
+    hasDragged = true;
+    const h   = containerEl.getBoundingClientRect().height;
+    const pct = ((e.clientY - dragStartY) / h) * 100;
+    positionY = Math.min(100, Math.max(0, dragStartPos + pct));
+  }
+
+  function onDragEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    if (hasDragged) savePosition(allPhotos[photoIdx]?.id, positionY);
+  }
+
   function fmt(dateStr) {
     return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
       weekday: 'short', day: 'numeric', month: 'long'
@@ -116,6 +163,8 @@
   });
 </script>
 
+<svelte:window on:mousemove={onDragMove} on:mouseup={onDragEnd} />
+
 <div class="rounded-xl p-4 h-full flex flex-col overflow-hidden"
      style="background:{c.bg}; color:{c.text}">
 
@@ -153,11 +202,14 @@
   {#if allPhotos.length > 0}
     {@const photo = allPhotos[photoIdx]}
     <div class="flex-1 min-h-0 mt-3 flex flex-col gap-1">
-      <div class="relative group flex-1 min-h-0 flex items-center justify-center rounded-lg overflow-hidden">
+      <div class="relative group flex-1 min-h-0 rounded-lg overflow-hidden"
+           bind:this={containerEl}>
         <img src={photo.url} alt={photo.caption || photo.race_name}
-          class="rounded-lg object-cover cursor-pointer"
-          style="height:100%; width:auto; max-width:100%"
-          on:click={() => selectedPhoto = photo} />
+          class="absolute inset-0 w-full h-full object-cover select-none"
+          style="object-position: center {positionY}%; cursor:{isDragging ? 'grabbing' : 'grab'}"
+          on:mousedown={onDragStart}
+          on:click={() => { if (!hasDragged) selectedPhoto = photo; }}
+          draggable="false" />
         <div class="absolute bottom-0 left-0 right-0 px-2 pb-2 pt-6 pointer-events-none
                     bg-gradient-to-t from-black/70 to-transparent rounded-b-lg">
           <div class="text-[11px] font-medium text-white leading-tight">

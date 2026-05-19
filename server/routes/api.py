@@ -1170,3 +1170,81 @@ def spotify_heatmap():
             GROUP BY dow, hour
         """).fetchall()
     return jsonify([dict(r) for r in rows])
+
+@api_bp.route("/github/languages")
+def github_languages():
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT DISTINCT json_extract(metadata, '$.repo') as repo
+            FROM events
+            WHERE source = 'github' AND event_type = 'commit'
+        """).fetchall()
+    
+    gh = GitHubIngester()
+    totals = {}
+    for row in rows:
+        repo = row["repo"]
+        if not repo:
+            continue
+        try:
+            resp = req.get(
+                f"https://api.github.com/repos/{repo}/languages",
+                headers=gh._headers(),
+            )
+            if resp.ok:
+                for lang, b in resp.json().items():
+                    totals[lang] = totals.get(lang, 0) + b
+        except Exception:
+            continue
+    
+    ranked = sorted(totals.items(), key=lambda x: x[1], reverse=True)
+    return jsonify([{"language": lang, "bytes": b} for lang, b in ranked])
+
+@api_bp.route("/ideas", methods=["GET"])
+def get_ideas():
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, text, status, repo, created_at FROM ideas ORDER BY created_at DESC"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+@api_bp.route("/ideas", methods=["POST"])
+def create_idea():
+    body = request.json or {}
+    text = (body.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "text required"}), 400
+    status = body.get("status", "active")
+    repo   = body.get("repo") or None
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO ideas (text, status, repo) VALUES (?, ?, ?)",
+            (text, status, repo),
+        )
+        conn.commit()
+    return jsonify({"id": cur.lastrowid}), 201
+
+@api_bp.route("/ideas/<int:idea_id>", methods=["PATCH"])
+def update_idea(idea_id):
+    body = request.json or {}
+    fields, values = [], []
+    if "status" in body:
+        fields.append("status = ?"); values.append(body["status"])
+    if "repo" in body:
+        fields.append("repo = ?"); values.append(body["repo"] or None)
+    if "text" in body:
+        fields.append("text = ?"); values.append(body["text"])
+    if not fields:
+        return jsonify({"error": "nothing to update"}), 400
+    values.append(idea_id)
+    with get_connection() as conn:
+        conn.execute(f"UPDATE ideas SET {', '.join(fields)} WHERE id = ?", values)
+        conn.commit()
+    return jsonify({"ok": True})
+
+@api_bp.route("/ideas/<int:idea_id>", methods=["DELETE"])
+def delete_idea(idea_id):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM ideas WHERE id = ?", (idea_id,))
+        conn.commit()
+    return jsonify({"ok": True})
