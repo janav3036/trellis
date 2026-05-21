@@ -383,6 +383,18 @@ def delete_event(event_id):
         cur = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
     return jsonify({"deleted": cur.rowcount})
 
+@api_bp.route("/events/<int:event_id>", methods=["PATCH"])
+def update_event(event_id):
+    new_meta = (request.json or {}).get("metadata", {})
+    with get_connection() as conn:
+        row = conn.execute("SELECT metadata FROM events WHERE id = ?", (event_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        existing = json.loads(row[0])
+        existing.update(new_meta)
+        conn.execute("UPDATE events SET metadata = ? WHERE id = ?", (json.dumps(existing), event_id))
+    return jsonify({"updated": 1})
+
 @api_bp.route("/f1/schedule")
 def f1_schedule():
     resp = req.get("https://api.jolpi.ca/ergast/f1/current.json", timeout = 10)
