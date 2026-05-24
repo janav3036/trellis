@@ -207,121 +207,132 @@
   }
 </script>
 
-<main class="p-8 bg-[#1a1714] min-h-screen text-[#e8e0d0]">
+<main class="p-6 min-h-screen" style="background:#1a1714; color:#e8e0d0">
 
-  <h1 class="text-3xl font-semibold mb-8">Sky</h1>
+  <h1 class="text-2xl font-semibold mb-5">Sky</h1>
 
-  <!-- Star Map -->
-  <div class="bg-[#242019] rounded-xl p-4 mb-6">
-    <h2 class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3">
-      Star Map · Real-time · {observerLat.toFixed(2)}° {observerLon.toFixed(2)}°
-    </h2>
-    <div class="flex justify-center">
-      {#if stars.length}
-        <canvas bind:this={canvas} width="560" height="560" />
-      {:else}
-        <div class="w-[560px] h-[560px] flex items-center justify-center text-[#9a9080] text-sm animate-pulse">
-          Loading sky…
+  <div class="grid gap-4" style="grid-template-columns:repeat(10,1fr); grid-template-rows:580px 320px">
+
+    <!-- Star Map: cols 1-6, row 1 -->
+    <div class="rounded-2xl overflow-hidden relative"
+         style="grid-column:1/7; grid-row:1; background:radial-gradient(ellipse at 50% 60%, #0d1220 0%, #070a10 60%, #030507 100%); border:1px solid #141828">
+      <div class="absolute top-4 left-5 z-10">
+        <div class="text-[11px] font-medium uppercase tracking-widest" style="color:#3a4460">Star Map</div>
+        <div class="text-[10px] mt-0.5 font-mono" style="color:#2a3040">{observerLat.toFixed(2)}° {observerLon.toFixed(2)}°</div>
+      </div>
+      <div class="w-full h-full flex items-center justify-center p-4 pt-10">
+        {#if stars.length}
+          <canvas bind:this={canvas} width="520" height="520" class="block max-w-full max-h-full" />
+        {:else}
+          <div class="text-sm animate-pulse" style="color:#2a3040">Loading sky…</div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Flight Radar: cols 7-10, row 1 -->
+    <div class="rounded-2xl flex flex-col overflow-hidden"
+         style="grid-column:7/11; grid-row:1; background:#0c0e14; border:1px solid #141828">
+      <div class="px-5 pt-4 pb-2 shrink-0">
+        <div class="text-[11px] font-medium uppercase tracking-widest" style="color:#3a4460">Flight Radar</div>
+        <div class="text-[10px] mt-0.5" style="color:#2a3040">
+          {planes.filter(p => !p.on_ground).length} airborne · updates every 15s
         </div>
+      </div>
+      <div bind:this={mapEl} class="flex-1" style="min-height:0"></div>
+    </div>
+
+    <!-- APOD: cols 1-5, row 2 -->
+    <div class="rounded-2xl overflow-hidden flex flex-col"
+         style="grid-column:1/6; grid-row:2; background:#1c1b17; border:1px solid #2a2823">
+      {#if apod}
+        {#if apod.media_type === "image"}
+          <div class="flex h-full">
+            <img src={apod.url} alt={apod.title} class="w-48 shrink-0 object-cover" />
+            <div class="flex flex-col p-5 min-w-0">
+              <div class="text-[11px] font-medium uppercase tracking-widest mb-2" style="color:#6a6058">Astronomy Picture of the Day</div>
+              <div class="text-sm font-medium mb-2 leading-snug">{apod.title}</div>
+              <div class="text-xs leading-relaxed flex-1 overflow-hidden" style="color:#9a9080; display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical">{apod.explanation}</div>
+              <div class="text-[10px] mt-3" style="color:#6a6058">{apod.date}</div>
+            </div>
+          </div>
+        {:else}
+          <div class="flex flex-col p-5 h-full">
+            <div class="text-[11px] font-medium uppercase tracking-widest mb-2" style="color:#6a6058">Astronomy Picture of the Day</div>
+            <div class="text-sm font-medium mb-1">{apod.title}</div>
+            <div class="text-xs" style="color:#9a9080">Video · {apod.date}</div>
+          </div>
+        {/if}
+      {:else}
+        <div class="flex-1 flex items-center justify-center text-sm animate-pulse p-5" style="color:#9a9080">Loading…</div>
       {/if}
     </div>
-  </div>
 
-  <!-- Flight Radar + Space Events -->
-  <div class="grid grid-cols-2 gap-6">
-
-    <!-- Flight Radar -->
-    <div class="bg-[#242019] rounded-xl p-4">
-      <h2 class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3">
-        Flight Radar · {planes.filter(p => !p.on_ground).length} airborne · 15s
-      </h2>
-      <div bind:this={mapEl} class="w-full rounded-lg overflow-hidden" style="height:340px"></div>
+    <!-- ISS: cols 6-8, row 2 -->
+    <div class="rounded-2xl p-5 flex flex-col"
+         style="grid-column:6/9; grid-row:2; background:#1c1b17; border:1px solid #2a2823">
+      <div class="flex items-center justify-between mb-4 shrink-0">
+        <div class="text-[11px] font-medium uppercase tracking-widest" style="color:#6a6058">ISS</div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:#4dabf7"></span>
+          <span class="text-[10px]" style="color:#4dabf7">Live</span>
+        </div>
+      </div>
+      {#if iss}
+        <div class="grid grid-cols-2 gap-2 flex-1">
+          {#each [
+            { label: "Latitude", value: `${iss.lat.toFixed(2)}°` },
+            { label: "Longitude", value: `${iss.lon.toFixed(2)}°` },
+            { label: "Altitude", value: `${iss.altitude_km} km` },
+            { label: "Speed", value: `${fmtNum(iss.velocity_kmh)} km/h` },
+          ] as stat}
+            <div class="rounded-xl p-3" style="background:#151411">
+              <div class="text-[10px] uppercase tracking-wider mb-1.5" style="color:#6a6058">{stat.label}</div>
+              <div class="text-sm font-medium font-mono tabular-nums">{stat.value}</div>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="flex-1 flex items-center justify-center text-sm animate-pulse" style="color:#9a9080">Loading…</div>
+      {/if}
     </div>
 
-    <!-- Space Events -->
-    <div class="flex flex-col gap-4">
-
-      <!-- APOD -->
-      <div class="bg-[#242019] rounded-xl p-4">
-        <h2 class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3">Astronomy Picture of the Day</h2>
-        {#if apod}
-          {#if apod.media_type === "image"}
-            <div class="flex gap-3">
-              <img src={apod.url} alt={apod.title} class="w-28 h-20 object-cover rounded-lg flex-shrink-0" />
-              <div>
-                <div class="text-sm font-medium mb-1">{apod.title}</div>
-                <div class="text-xs text-[#9a9080] leading-relaxed line-clamp-3">{apod.explanation}</div>
+    <!-- NEOs: cols 9-10, row 2 -->
+    <div class="rounded-2xl p-5 flex flex-col"
+         style="grid-column:9/11; grid-row:2; background:#1c1b17; border:1px solid #2a2823">
+      <div class="text-[11px] font-medium uppercase tracking-widest mb-3 shrink-0" style="color:#6a6058">
+        Near-Earth Objects · 7d
+      </div>
+      {#if neos.length}
+        <div class="flex flex-col gap-2 flex-1 overflow-y-auto">
+          {#each neos.slice(0, 8) as neo}
+            <div class="flex items-start gap-2 text-xs py-1.5" style="border-bottom:1px solid #252320">
+              {#if neo.hazardous}
+                <span style="color:#c87a7a" class="shrink-0">⚠</span>
+              {:else}
+                <span style="color:#3a3530" class="shrink-0">·</span>
+              {/if}
+              <div class="flex-1 min-w-0">
+                <div class="truncate">{neo.name}</div>
+                <div class="tabular-nums mt-0.5" style="color:#9a9080">{fmtNum(neo.miss_km)} km</div>
               </div>
+              <div class="shrink-0 text-right" style="color:#6a6058">{neo.date}</div>
             </div>
-          {:else}
-            <div class="text-sm font-medium">{apod.title}</div>
-            <div class="text-xs text-[#9a9080] mt-1">Video · {apod.date}</div>
-          {/if}
-        {:else}
-          <div class="h-20 flex items-center justify-center text-[#9a9080] text-sm animate-pulse">Loading…</div>
-        {/if}
-      </div>
-
-      <!-- ISS -->
-      <div class="bg-[#242019] rounded-xl p-4">
-        <h2 class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3">ISS · Live</h2>
-        {#if iss}
-          <div class="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <div class="text-[#9a9080] text-xs">Position</div>
-              <div class="font-mono tabular-nums">{iss.lat.toFixed(2)}° {iss.lon.toFixed(2)}°</div>
-            </div>
-            <div>
-              <div class="text-[#9a9080] text-xs">Altitude</div>
-              <div class="font-mono tabular-nums">{iss.altitude_km} km</div>
-            </div>
-            <div>
-              <div class="text-[#9a9080] text-xs">Speed</div>
-              <div class="font-mono tabular-nums">{fmtNum(iss.velocity_kmh)} km/h</div>
-            </div>
-            <div>
-              <div class="text-[#9a9080] text-xs">Visibility</div>
-              <div class="capitalize">{iss.visibility || "—"}</div>
-            </div>
-          </div>
-        {:else}
-          <div class="h-16 flex items-center justify-center text-[#9a9080] text-sm animate-pulse">Loading…</div>
-        {/if}
-      </div>
-
-      <!-- NEO -->
-      <div class="bg-[#242019] rounded-xl p-4 flex-1">
-        <h2 class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3">Near-Earth Objects · Next 7 Days</h2>
-        {#if neos.length}
-          <div class="space-y-1.5">
-            {#each neos.slice(0, 5) as neo}
-              <div class="flex items-center gap-2 text-xs">
-                {#if neo.hazardous}
-                  <span class="text-[#ff6b6b]">⚠</span>
-                {:else}
-                  <span class="text-[#3a3530]">·</span>
-                {/if}
-                <span class="flex-1 truncate">{neo.name}</span>
-                <span class="text-[#9a9080] tabular-nums">{neo.date}</span>
-                <span class="text-[#9a9080] tabular-nums w-24 text-right">{fmtNum(neo.miss_km)} km</span>
-              </div>
-            {/each}
-          </div>
-        {:else}
-          <div class="h-16 flex items-center justify-center text-[#9a9080] text-sm animate-pulse">Loading…</div>
-        {/if}
-      </div>
-
+          {/each}
+        </div>
+      {:else}
+        <div class="flex-1 flex items-center justify-center text-sm animate-pulse" style="color:#9a9080">Loading…</div>
+      {/if}
     </div>
+
   </div>
 
 </main>
 
 <style>
   :global(.leaflet-tooltip) {
-    background: #1a1714;
-    border: 1px solid #3a3530;
-    color: #9a9080;
+    background: #0c0e14;
+    border: 1px solid #1a1f2e;
+    color: #6a7080;
     font-size: 10px;
     padding: 2px 6px;
     box-shadow: none;

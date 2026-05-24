@@ -10,6 +10,8 @@
 
   let urlInput = '';
   let extracting = false;
+  let saving = false;
+  let saveErr = '';
 
   function applyPreset(name) {
     themeStore.setPreset(name);
@@ -113,8 +115,26 @@
   // ── Media handlers ──────────────────────────────────────────────────────────
 
   async function handleFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  if (file.type.startsWith('video/')) {
+    saving = true;
+    saveErr = '';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/wallpaper/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { saveErr = data.error || 'Upload failed'; return; }
+      themeStore.updateCustom({ bgMedia: data.url, bgMediaType: 'video' });
+    } catch {
+      saveErr = 'Upload failed';
+    } finally {
+      saving = false;
+    }
+  } else {
     const reader = new FileReader();
     reader.onload = async ev => {
       const src = ev.target.result;
@@ -122,17 +142,30 @@
       await applyExtractedColors(src);
     };
     reader.readAsDataURL(file);
-    e.target.value = '';
   }
+}
+
 
   async function handleUrl() {
     const url = urlInput.trim();
     if (!url) return;
-    const videoExts = ['.mp4', '.webm', '.mov', '.m4v', '.ogg'];
-    const lower = url.split('?')[0].toLowerCase();
-    const type = videoExts.some(ext => lower.endsWith(ext)) ? 'video' : 'image';
-    themeStore.updateCustom({ bgMedia: url, bgMediaType: type });
-    if (type === 'image') await applyExtractedColors(url);
+    saveErr = '';
+    saving = true;
+    try {
+      const res = await fetch('/api/wallpaper/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok) { saveErr = data.error || 'Could not fetch wallpaper'; return; }
+      themeStore.updateCustom({ bgMedia: data.url, bgMediaType: data.type });
+      if (data.type === 'image') await applyExtractedColors(data.url);
+    } catch {
+      saveErr = 'Network error — is the server running?';
+    } finally {
+      saving = false;
+    }
   }
 
   function clearMedia() {
@@ -147,6 +180,25 @@
     { key: 'textSecondary', label: 'Muted Text'  },
     { key: 'accent',        label: 'Accent'      },
   ];
+
+  // ── Password change ─────────────────────────────────────────────────────────
+  let oldPw = '', newPw = '', pwMsg = '', pwOk = false;
+
+  async function changePassword() {
+    pwMsg = ''; pwOk = false;
+    if (!oldPw || !newPw) { pwMsg = 'Both fields are required'; return; }
+    const res = await fetch('/api/auth/change-password', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ old_password: oldPw, new_password: newPw }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      pwOk = true; pwMsg = 'Password updated'; oldPw = ''; newPw = '';
+    } else {
+      pwMsg = data.error || 'Something went wrong';
+    }
+  }
 </script>
 
 <main class="min-h-screen p-8" style="background-color: var(--bg); color: var(--text-primary)">
@@ -218,13 +270,17 @@
         <div class="flex items-center gap-3 mb-3">
           <label class="text-xs underline cursor-pointer" style="color: var(--text-secondary)">
             Upload image
-            <input type="file" accept="image/*" class="hidden" on:change={handleFile} />
+            <input type="file" accept="image/*,video/*" class="hidden" on:change={handleFile} />
           </label>
           {#if state.custom.bgMedia}
             <button on:click={clearMedia} class="text-xs" style="color: #c87a7a">Clear</button>
           {/if}
-          {#if extracting}
+          {#if saving}
+            <span class="text-xs animate-pulse" style="color: var(--text-secondary)">Downloading…</span>
+          {:else if extracting}
             <span class="text-xs animate-pulse" style="color: var(--text-secondary)">Extracting colors…</span>
+          {:else if saveErr}
+            <span class="text-xs" style="color: #c87a7a">{saveErr}</span>
           {/if}
         </div>
 
@@ -240,7 +296,11 @@
             <!-- Re-extract button for images -->
             {#if state.custom.bgMediaType === 'image'}
               <button
-                on:click={() => applyExtractedColors(state.custom.bgMedia)}
+                on:click={() => {
+                  const src = state.custom.bgMedia;
+                  const extractSrc = src.startsWith('data:') ? src : `/api/proxy-wallpaper?url=${encodeURIComponent(src)}`;
+                  applyExtractedColors(extractSrc);
+                }}
                 class="absolute bottom-2 right-2 text-xs px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                 style="background: rgba(0,0,0,0.6); color: #ccc">
                 {extracting ? '…' : 'Re-extract colors'}
@@ -268,6 +328,29 @@
       </div>
 
     {/if}
+
+    <!-- Password -->
+    <div>
+      <h2 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color: var(--text-secondary)">Password</h2>
+      <div class="flex flex-col gap-2">
+        <input type="text" bind:value={oldPw} placeholder="Current password"
+               class="rounded-lg px-3 py-2 text-sm border"
+               style="background: var(--surface); color: var(--text-primary); border-color: rgba(255,255,255,0.08)" />
+        <input type="text" bind:value={newPw} placeholder="New password"
+               class="rounded-lg px-3 py-2 text-sm border"
+               style="background: var(--surface); color: var(--text-primary); border-color: rgba(255,255,255,0.08)" />
+        <div class="flex items-center gap-3">
+          <button on:click={changePassword}
+                  class="px-3 py-2 rounded-lg text-sm transition-colors"
+                  style="background: var(--surface); color: var(--text-primary)">
+            Update
+          </button>
+          {#if pwMsg}
+            <span class="text-xs" style="color: {pwOk ? 'var(--accent)' : '#c87a7a'}">{pwMsg}</span>
+          {/if}
+        </div>
+      </div>
+    </div>
 
   </div>
 </main>

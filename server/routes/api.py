@@ -1,12 +1,16 @@
 import json
 import os
+import hashlib
+import mimetypes
+import re
 import cloudinary
 import cloudinary.uploader
 from datetime import datetime, timezone, timedelta
-from flask import Blueprint, jsonify, redirect, request, Response, send_from_directory
+from flask import Blueprint, jsonify, redirect, request, Response, send_from_directory, session
 from plotly import data
 from storage.db import get_connection
 import yfinance as yf
+from yt_dlp import YoutubeDL
 from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
@@ -16,6 +20,43 @@ import keyring
 import requests as req
 
 api_bp = Blueprint("api", __name__)
+
+_AUTH_FREE = {"api.auth_login", "api.auth_check", "api.auth_change_password", "api.wallpaper_serve", "api.wallpaper_upload"}
+
+@api_bp.before_request
+def require_auth():
+    if request.endpoint in _AUTH_FREE:
+        return
+    if not session.get("authed"):
+        return jsonify({"error": "unauthorized"}), 401
+
+@api_bp.route("/auth/check")
+def auth_check():
+    if session.get("authed"):
+        return jsonify({"ok": True})
+    return jsonify({"ok": False}), 401
+
+@api_bp.route("/auth/login", methods=["POST"])
+def auth_login():
+    password = (request.json or {}).get("password", "")
+    stored = os.environ.get("TRELLIS_PASSWORD") or keyring.get_password("trellis", "password") or ""
+    if password and password == stored:
+        session["authed"] = True
+        return jsonify({"ok": True})
+    return jsonify({"error": "incorrect password"}), 401
+
+@api_bp.route("/auth/change-password", methods=["POST"])
+def auth_change_password():
+    body = request.json or {}
+    old_pw = body.get("old_password", "")
+    new_pw = body.get("new_password", "").strip()
+    stored = os.environ.get("TRELLIS_PASSWORD") or keyring.get_password("trellis", "password") or ""
+    if not old_pw or old_pw != stored:
+        return jsonify({"error": "Current password is incorrect"}), 401
+    if not new_pw:
+        return jsonify({"error": "New password cannot be empty"}), 400
+    keyring.set_password("trellis", "password", new_pw)
+    return jsonify({"ok": True})
 
 cloudinary.config(
     cloud_name=keyring.get_password("trellis", "cloudinary_cloud_name"),
@@ -1039,6 +1080,41 @@ def quotes_list():
         for r in rows
     ])
 
+@api_bp.route("/memories")
+def memories():
+    IST = timezone(timedelta(hours=5, minutes=30))
+    today = datetime.now(IST).date()
+
+    windows = [
+        ("week",    "A week ago",    7),
+        ("month",   "A month ago",   30),
+        ("3months", "3 months ago",  90),
+        ("6months", "6 months ago",  180),
+        ("year",    "A year ago",    365),
+    ]
+
+    result = []
+    with get_connection() as conn:
+        for key, label, days in windows:
+            target = (today - timedelta(days=days)).isoformat()
+            rows = conn.execute(
+                """SELECT id, timestamp, source, metadata
+                   FROM events
+                   WHERE source IN ('dreams', 'photos')
+                     AND date(timestamp) = ?
+                   ORDER BY timestamp""",
+                (target,)
+            ).fetchall()
+            if rows:
+                entries = [
+                    {"id": r[0], "timestamp": r[1], "source": r[2], **json.loads(r[3])}
+                    for r in rows
+                ]
+                result.append({"key": key, "label": label, "date": target, "entries": entries})
+
+    return jsonify(result)
+
+
 @api_bp.route("/habits")
 def habits_list():
     today = datetime.now(timezone.utc).date().isoformat()
@@ -1266,3 +1342,125 @@ def delete_idea(idea_id):
         conn.execute("DELETE FROM ideas WHERE id = ?", (idea_id,))
         conn.commit()
     return jsonify({"ok": True})
+
+@api_bp.route("/proxy-wallpaper")
+def proxy_wallpaper():
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "missing url"}), 400
+    try:
+        r = req.get(url, timeout=10, stream=True)
+        content_type = r.headers.get("Content-Type", "image/jpeg")
+        if not content_type.startswith("image/"):
+            return jsonify({"error": "not an image"}), 400
+        return Response(r.content, content_type=content_type)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+def _ytdlp_video_url(url):
+    opts = {"quiet": True, "no_warnings": True}
+    try: 
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return info.get("url")
+    except Exception:
+        return None
+
+_WALLPAPER_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'wallpapers')
+os.makedirs(_WALLPAPER_DIR, exist_ok=True)
+
+_PINTEREST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Referer": "https://www.pinterest.com/",
+    "Accept": "image/webp,image/avif,image/*,video/*,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+def _extract_pinterest_media(html):
+    """Pull the actual image/video URL out of a Pinterest pin page."""
+    # Video pins first
+    for pattern in [
+        r'property=["\']og:video:url["\'][^>]+content=["\']([^"\']+)["\']',
+        r'content=["\']([^"\']+)["\'][^>]+property=["\']og:video:url["\']',
+    ]:
+        m = re.search(pattern, html)
+        if m:
+            return m.group(1).replace("&amp;", "&"), "video"
+
+    # og:image always points to the correct pin image (just at 736px).
+    # Upscale by swapping the size segment to "originals".
+    for pattern in [
+        r'property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+    ]:
+        m = re.search(pattern, html)
+        if m:
+            og_url = m.group(1).replace("&amp;", "&")
+            full_res = re.sub(r'https://i\.pinimg\.com/[^/]+/', 'https://i.pinimg.com/originals/', og_url)
+            return full_res, "image"
+
+    return None, None
+
+@api_bp.route("/wallpaper/save", methods=["POST"])
+def wallpaper_save():
+    url = (request.json or {}).get("url", "").strip()
+    if not url:
+        return jsonify({"error": "missing url"}), 400
+    try:
+        r = req.get(url, timeout=30, headers=_PINTEREST_HEADERS)
+        r.raise_for_status()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    content_type = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+
+    # Pin page URL — extract the real image/video from meta tags
+    if content_type.startswith("text/html"):
+        video_url = _ytdlp_video_url(url)
+        if video_url:
+            r = req.get(video_url, timeout=60, headers=_PINTEREST_HEADERS, stream=True)
+            r.raise_for_status()
+            content_type = r.headers.get("Content-Type", "video/mp4").split(";")[0].strip()
+            url = video_url
+        else:
+            media_url, _ = _extract_pinterest_media(r.text)
+            if not media_url:
+                return jsonify({"error": "No media found in that Pinterest page."}), 400
+            try:
+                r = req.get(media_url, timeout=30, headers=_PINTEREST_HEADERS)
+                r.raise_for_status()
+            except Exception as e:
+                return jsonify({"error": str(e)}), 502
+            content_type = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+            url = media_url
+
+    ext = mimetypes.guess_extension(content_type) or ".bin"
+    if ext == ".jpe":
+        ext = ".jpg"
+
+    fname = hashlib.md5(url.encode()).hexdigest() + ext
+    fpath = os.path.join(_WALLPAPER_DIR, fname)
+    with open(fpath, "wb") as f:
+        for chunk in r.iter_content(65536): 
+            f.write(chunk)
+
+    media_type = "video" if content_type.startswith("video/") else "image"
+    return jsonify({"url": f"/api/wallpaper/serve/{fname}", "type": media_type})
+
+@api_bp.route("/wallpaper/serve/<fname>")
+def wallpaper_serve(fname):
+    return send_from_directory(_WALLPAPER_DIR, fname)
+
+@api_bp.route("/wallpaper/upload", methods=["POST"])
+def wallpaper_upload():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "no file"}), 400
+    content_type = f.content_type or "application/octet-stream"
+    ext = mimetypes.guess_extension(content_type) or ".bin"
+    if ext == ".jpe": ext = ".jpg"
+    fname = hashlib.md5(f.filename.encode()).hexdigest() + ext
+    fpath = os.path.join(_WALLPAPER_DIR, fname)
+    f.save(fpath)
+    media_type = "video" if content_type.startswith("video/") else "image"
+    return jsonify({"url": f"/api/wallpaper/serve/{fname}", "type": media_type})

@@ -157,7 +157,7 @@
   <!-- Bento grid -->
   <div class="grid gap-4" style="
     grid-template-columns: repeat(10, 1fr);
-    grid-template-rows: 110px 720px 300px auto;
+    grid-template-rows: 130px 750px 380px 420px;
   ">
     <!-- Streak: 70% width, row 1 -->
     <div style="grid-column:1/8; grid-row:1">

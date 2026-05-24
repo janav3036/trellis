@@ -18,10 +18,10 @@
 
   function timeAgo(ts) {
     const s = Math.floor((Date.now() - new Date(ts)) / 1000);
-    if (s < 3600)   return `${Math.floor(s / 60)}m ago`;
-    if (s < 86400)  return `${Math.floor(s / 3600)}h ago`;
+    if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
     const d = Math.floor(s / 86400);
-    if (d < 30)     return `${d}d ago`;
+    if (d < 30)    return `${d}d ago`;
     return fmtDate(ts);
   }
 
@@ -32,35 +32,29 @@
   });
 </script>
 
-<div class="bg-[#242019] rounded-xl p-4 h-full flex flex-col overflow-hidden">
-  <a href="/#/life"
-     class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-3 shrink-0 hover:text-[#e8e0d0] transition-colors">
-    People
-  </a>
+<div class="panel">
+  <a href="/#/life" class="eyebrow-link">People</a>
 
   {#if events.length === 0}
-    <p class="text-sm text-[#9a9080]">No events logged yet.</p>
+    <p class="idle-text">No meetups logged yet.</p>
   {:else}
-    <div class="flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
+    <div class="list">
       {#each events as ev}
         {@const people = ev.metadata?.people || []}
-        <div class="rounded-lg overflow-hidden">
-          <button class="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-[#1a1714] transition-colors"
+        <div class="event-wrap">
+          <button class="event-row"
                   on:click={() => expanded = expanded === ev.id ? null : ev.id}>
-            <span class="text-xs text-[#9a9080] shrink-0 w-14">{timeAgo(ev.timestamp)}</span>
-            <span class="text-sm flex-1 truncate">{ev.metadata?.notes || 'Meetup'}</span>
-            <span class="text-[#9a9080] text-xs shrink-0 transition-transform"
-                  style="transform: rotate({expanded === ev.id ? 90 : 0}deg)">›</span>
+            <span class="when">{timeAgo(ev.timestamp)}</span>
+            <span class="note">{ev.metadata?.notes || 'Meetup'}</span>
+            <span class="chevron" class:open={expanded === ev.id}>›</span>
           </button>
           {#if expanded === ev.id}
-            <div class="px-3 pb-2 flex flex-wrap gap-1.5 border-t border-[#1a1714]">
+            <div class="chips">
               {#each people as p}
-                <span class="text-xs px-2 py-0.5 rounded-full bg-[#1a1714] text-[#9a9080]">
-                  {p.name}
-                </span>
+                <span class="chip">{p.name}</span>
               {/each}
               {#if people.length === 0}
-                <span class="text-xs text-[#9a9080]">No people logged</span>
+                <span class="chip muted">No names logged</span>
               {/if}
             </div>
           {/if}
@@ -69,3 +63,98 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .panel {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 14px 14px 10px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .eyebrow-link {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+    transition: color 0.15s ease;
+  }
+  .eyebrow-link:hover { color: var(--text-primary); }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .event-wrap { border-radius: 8px; overflow: hidden; }
+
+  .event-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+  }
+  .event-row:hover { background: color-mix(in srgb, var(--bg) 70%, var(--surface) 30%); }
+
+  .when {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    width: 48px;
+    font-variant-numeric: tabular-nums;
+  }
+  .note {
+    font-size: 0.8rem;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+  }
+  .chevron {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+  .chevron.open { transform: rotate(90deg); }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px 8px;
+    background: var(--bg);
+    border-top: 1px solid var(--surface);
+  }
+  .chip {
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+  }
+  .chip.muted { opacity: 0.6; }
+
+  .idle-text { font-size: 0.85rem; color: var(--text-secondary); }
+</style>

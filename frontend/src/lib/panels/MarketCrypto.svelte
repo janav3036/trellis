@@ -2,16 +2,18 @@
   import { onMount } from 'svelte';
   let crypto = {};
 
-  $: dominant = crypto.btc >= (crypto.eth || 0) ? { label: 'BTC', pct: crypto.btc } : { label: 'ETH', pct: crypto.eth };
+  $: dominant = crypto.btc >= (crypto.eth || 0)
+    ? { label: 'BTC', pct: crypto.btc }
+    : { label: 'ETH', pct: crypto.eth };
 
   $: arcs = (() => {
     if (!crypto.btc) return [];
     const slices = [
       { label: 'BTC',   value: crypto.btc,   color: '#f7931a' },
       { label: 'ETH',   value: crypto.eth,   color: '#627eea' },
-      { label: 'Other', value: crypto.other, color: '#5a5248' },
+      { label: 'Other', value: crypto.other, color: 'rgba(255,255,255,0.08)' },
     ];
-    const cx = 80, cy = 80, r = 55, sw = 14;
+    const cx = 80, cy = 80, r = 54, sw = 13;
     let angle = -Math.PI / 2;
     return slices.map(s => {
       const sweep = (s.value / 100) * 2 * Math.PI;
@@ -31,29 +33,111 @@
   });
 </script>
 
-<div class="bg-[#242019] rounded-xl p-4 h-full flex flex-col cursor-pointer"
-     on:click={() => window.location.hash = '/market'}>
-  <div class="text-xs font-semibold text-[#9a9080] uppercase tracking-wider mb-2 shrink-0">Crypto Dominance</div>
+<div class="panel" on:click={() => window.location.hash = '/market'}>
+  <span class="eyebrow">Crypto Dominance</span>
+
   {#if crypto.btc}
-    <div class="flex-1 flex flex-col items-center justify-center gap-3 min-h-0">
-      <svg viewBox="0 0 160 160" class="w-full max-w-[260px] shrink-0" xmlns="http://www.w3.org/2000/svg">
+    <div class="chart-wrap">
+      <svg viewBox="0 0 160 160" class="donut" xmlns="http://www.w3.org/2000/svg">
+        <!-- Track -->
+        <circle cx="80" cy="80" r="54" fill="none"
+                stroke="rgba(255,255,255,0.05)" stroke-width="13" />
         {#each arcs as arc}
-          <path d={arc.d} fill="none" stroke={arc.color} stroke-width={arc.sw} stroke-linecap="butt" />
+          <path d={arc.d} fill="none" stroke={arc.color}
+                stroke-width={arc.sw} stroke-linecap="butt" />
         {/each}
-        <text x="80" y="75" text-anchor="middle" font-size="14" font-weight="700" fill="#e8e0d0">{dominant.label}</text>
-        <text x="80" y="93" text-anchor="middle" font-size="11" fill="#9a9080">{dominant.pct}%</text>
+        <text x="80" y="76" text-anchor="middle"
+              font-size="13" font-weight="700" fill="var(--text-primary)">{dominant.label}</text>
+        <text x="80" y="93" text-anchor="middle"
+              font-size="11" fill="var(--text-secondary)">{dominant.pct}%</text>
       </svg>
-      <div class="flex gap-4 shrink-0">
-        {#each [['BTC','#f7931a',crypto.btc],['ETH','#627eea',crypto.eth],['Other','#5a5248',crypto.other]] as [label,color,val]}
-          <div class="flex items-center gap-1.5">
-            <div class="w-2 h-2 rounded-full shrink-0" style="background:{color}"></div>
-            <span class="text-xs text-[#9a9080]">{label}</span>
-            <span class="text-xs font-medium tabular-nums">{val}%</span>
-          </div>
-        {/each}
-      </div>
+    </div>
+
+    <div class="legend">
+      {#each [['BTC','#f7931a',crypto.btc],['ETH','#627eea',crypto.eth],['Other','rgba(255,255,255,0.2)',crypto.other]] as [lbl,color,val]}
+        <div class="legend-item">
+          <div class="legend-dot" style="background:{color}" />
+          <span class="legend-label">{lbl}</span>
+          <span class="legend-val">{val}%</span>
+        </div>
+      {/each}
     </div>
   {:else}
-    <div class="flex-1 flex items-center justify-center text-[#9a9080] text-sm animate-pulse">Loading…</div>
+    <div class="loading">Loading…</div>
   {/if}
 </div>
+
+<style>
+  .panel {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 14px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    cursor: pointer;
+    transition: filter 0.2s ease;
+    box-sizing: border-box;
+  }
+  .panel:hover { filter: brightness(1.06); }
+
+  .eyebrow {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    margin-bottom: 4px;
+  }
+
+  .chart-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .donut {
+    width: 100%;
+    max-width: 220px;
+  }
+
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-shrink: 0;
+    padding-top: 4px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-label {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+  }
+  .legend-val {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+</style>

@@ -17,3 +17,24 @@ body {
   font-family: system-ui, sans-serif;
   margin: 0;
 }
+
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Theme-aware utility classes (un-layered → override Tailwind v4) ── */
+.th-surface          { background: var(--surface); }
+.th-bg               { background: var(--bg); }
+.th-muted            { color: var(--text-secondary); }
+.th-text             { color: var(--text-primary); }
+.th-hover:hover      { background: var(--bg); }
+.th-hover-up:hover   { background: var(--surface); }
+.th-hover-text:hover { color: var(--text-primary); }
+.th-border-bg        { border-color: var(--bg) !important; }
+.th-border           { border-color: var(--surface) !important; }
+
+/* When a wallpaper is active, body becomes transparent so the fixed image shows through */
+.has-wallpaper body  { background-color: transparent !important; }
