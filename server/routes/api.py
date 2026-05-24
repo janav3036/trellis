@@ -1049,6 +1049,20 @@ def cron_check_letters():
             smtp.send_message(msg)
     return jsonify({"sent": len(to_send)})
 
+@api_bp.route("/cron/ingest/<job>", methods=["POST"])
+def cron_ingest(job):
+    secret = os.environ.get("CRON_SECRET", "")
+    if request.headers.get("Authorization") != f"Bearer {secret}":
+        return jsonify({"error": "unauthorized"}), 401
+    from scheduler import JOBS
+    if job not in JOBS:
+        return jsonify({"error": "unknown job"}), 404
+    try:
+        JOBS[job]()
+        return jsonify({"ok": True, "job": job})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @api_bp.route("/quotes/log", methods=["POST"])
 def quotes_log():
     data = request.json

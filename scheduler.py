@@ -6,11 +6,10 @@ from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
 from ingesters.calendar import CalendarIngester
 
-_log_path = os.path.join(os.path.dirname(__file__), "scheduler.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
-    handlers=[logging.FileHandler(_log_path, mode="a")],
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 log = logging.getLogger(__name__)
 
