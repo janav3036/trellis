@@ -667,6 +667,8 @@ def market_sector_rotation():
 @api_bp.route("/market/crypto")
 def market_crypto():
     resp = req.get("https://api.coingecko.com/api/v3/global", timeout=10)
+    if resp.status_code == 429:
+        return jsonify({"btc": 0, "eth": 0, "other": 0, "error": "rate_limited"}), 200
     resp.raise_for_status()
     data = resp.json()["data"]
     dominance = data["market_cap_percentage"]
