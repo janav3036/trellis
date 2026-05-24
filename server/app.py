@@ -11,7 +11,7 @@ def _getaddrinfo_ipv4(host, port, family=0, typ=0, proto=0, flags=0):
     return _orig_getaddrinfo(host, port, socket.AF_INET, typ, proto, flags)
 socket.getaddrinfo = _getaddrinfo_ipv4
 
-_FRONTEND_DIST = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist')
+_FRONTEND_DIST = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', 'dist'))
 
 def _get_secret_key():
     key = get_cred("FLASK_SECRET_KEY", "trellis", "flask_secret_key")
@@ -30,6 +30,12 @@ def create_app():
     app.secret_key = _get_secret_key()
     app.config["SESSION_PERMANENT"] = False
     app.register_blueprint(api_bp, url_prefix="/api")
+
+    @app.route("/health")
+    def health():
+        from flask import jsonify
+        index = os.path.join(_FRONTEND_DIST, "index.html")
+        return jsonify(dist=_FRONTEND_DIST, index_exists=os.path.isfile(index))
 
     @app.route("/", defaults={"path": ""})
     @app.route("/<path:path>")
