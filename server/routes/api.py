@@ -7,8 +7,8 @@ import cloudinary
 import cloudinary.uploader
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, jsonify, redirect, request, Response, send_from_directory, session
-from plotly import data
 from storage.db import get_connection
+from storage.credentials import get as get_cred
 import yfinance as yf
 from yt_dlp import YoutubeDL
 from ingesters.spotify import SpotifyIngester
@@ -16,12 +16,11 @@ from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
 from ingesters.calendar import CalendarIngester
 
-import keyring
 import requests as req
 
 api_bp = Blueprint("api", __name__)
 
-_AUTH_FREE = {"api.auth_login", "api.auth_check", "api.auth_change_password", "api.wallpaper_serve", "api.wallpaper_upload"}
+_AUTH_FREE = {"api.auth_login", "api.auth_check", "api.auth_change_password", "api.wallpaper_serve"}
 
 @api_bp.before_request
 def require_auth():
@@ -39,7 +38,7 @@ def auth_check():
 @api_bp.route("/auth/login", methods=["POST"])
 def auth_login():
     password = (request.json or {}).get("password", "")
-    stored = os.environ.get("TRELLIS_PASSWORD") or keyring.get_password("trellis", "password") or ""
+    stored = get_cred("TRELLIS_PASSWORD", "trellis", "password") or ""
     if password and password == stored:
         session["authed"] = True
         return jsonify({"ok": True})
@@ -50,18 +49,22 @@ def auth_change_password():
     body = request.json or {}
     old_pw = body.get("old_password", "")
     new_pw = body.get("new_password", "").strip()
-    stored = os.environ.get("TRELLIS_PASSWORD") or keyring.get_password("trellis", "password") or ""
+    stored = get_cred("TRELLIS_PASSWORD", "trellis", "password") or ""
     if not old_pw or old_pw != stored:
         return jsonify({"error": "Current password is incorrect"}), 401
     if not new_pw:
         return jsonify({"error": "New password cannot be empty"}), 400
-    keyring.set_password("trellis", "password", new_pw)
+    try:
+        import keyring
+        keyring.set_password("trellis", "password", new_pw)
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 cloudinary.config(
-    cloud_name=keyring.get_password("trellis", "cloudinary_cloud_name"),
-    api_key=keyring.get_password("trellis", "cloudinary_api_key"),
-    api_secret=keyring.get_password("trellis", "cloudinary_api_secret"),
+    cloud_name=get_cred("CLOUDINARY_CLOUD_NAME", "trellis", "cloudinary_cloud_name"),
+    api_key=get_cred("CLOUDINARY_API_KEY",       "trellis", "cloudinary_api_key"),
+    api_secret=get_cred("CLOUDINARY_API_SECRET", "trellis", "cloudinary_api_secret"),
 )
 
 def _spotify_cutoff(range_: str) -> str | None:
@@ -81,14 +84,14 @@ def get_events():
     date_to = request.args.get("date_to")
     event_type = request.args.get("event_type")
 
-    query ="SELECT * FROM events WHERE 1=1"
+    query = "SELECT * FROM events WHERE 1=1"
     params = []
 
     if source:
         query += " AND source = ?"
         params.append(source)
     if date_from:
-        query +=" AND timestamp >= ?"
+        query += " AND timestamp >= ?"
         params.append(date_from)
     if date_to:
         query += " AND timestamp <= ?"
@@ -105,9 +108,8 @@ def get_events():
     events = [
         {**dict(row), "metadata": json.loads(row["metadata"])} for row in rows
     ]
-    
     return jsonify(events)
-    
+
 @api_bp.route("/callback/spotify")
 def spotify_callback():
     code = request.args.get("code")
@@ -171,7 +173,6 @@ def playlists():
             "https://api.spotify.com/v1/me/playlists?limit=50",
             headers=ingester._get_headers()
         )
-    
     data = resp.json()
     playlist = [
         {
@@ -216,8 +217,8 @@ def github_repos():
 def backfill_weather():
     date_from = request.json.get("date_from")
     if not date_from:
-        return jsonify({"error": "date_from required" }), 400
-    count  = WeatherIngester().backfill(datetime.fromisoformat(date_from))
+        return jsonify({"error": "date_from required"}), 400
+    count = WeatherIngester().backfill(datetime.fromisoformat(date_from))
     return jsonify({"count": count})
 
 @api_bp.route("/weather/forecast")
@@ -288,7 +289,7 @@ def people_log():
     date = data.get("date")
     notes = data.get("notes", "")
     people = data.get("people", [])
-    if not date or not people: 
+    if not date or not people:
         return jsonify({"error": "date and people required"}), 400
     timestamp = datetime.fromisoformat(date).replace(tzinfo=timezone.utc)
     count = 0
@@ -297,7 +298,7 @@ def people_log():
             ts = timestamp + timedelta(microseconds=i)
             cur = conn.execute(
                 "INSERT OR IGNORE INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
-                    (ts.isoformat(), "people", "meetup", json.dumps({            
+                (ts.isoformat(), "people", "meetup", json.dumps({
                     "name": person.get("name", "").strip(),
                     "tag": person.get("tag", "Friend"),
                     "notes": notes,
@@ -348,8 +349,8 @@ def movies_search():
     query = request.args.get("q", "").strip()
     if not query:
         return jsonify([])
-    api_key = keyring.get_password("trellis-tmdb", "api_key")
-    resp = req.get("https://api.themoviedb.org/3/search/movie", params ={
+    api_key = get_cred("TMDB_API_KEY", "trellis-tmdb", "api_key")
+    resp = req.get("https://api.themoviedb.org/3/search/movie", params={
         "api_key": api_key,
         "query": query,
     })
@@ -396,7 +397,6 @@ def movies_log():
         )
     return jsonify({"count": cur.rowcount})
 
-
 @api_bp.route("/movies/watchlist", methods=["POST"])
 def movies_watchlist_add():
     data = request.json
@@ -416,7 +416,6 @@ def movies_watchlist_add():
             (now.isoformat(), "movies", "watchlist", json.dumps(metadata))
         )
     return jsonify({"id": cur.lastrowid})
-
 
 @api_bp.route("/events/<int:event_id>", methods=["DELETE"])
 def delete_event(event_id):
@@ -438,7 +437,7 @@ def update_event(event_id):
 
 @api_bp.route("/f1/schedule")
 def f1_schedule():
-    resp = req.get("https://api.jolpi.ca/ergast/f1/current.json", timeout = 10)
+    resp = req.get("https://api.jolpi.ca/ergast/f1/current.json", timeout=10)
     resp.raise_for_status()
     data = resp.json()["MRData"]["RaceTable"]
     season = data["season"]
@@ -455,7 +454,7 @@ def f1_schedule():
                 "completed": r["date"] < today
             }
             for r in data["Races"]
-        ] 
+        ]
     })
 
 @api_bp.route("/f1/standings")
@@ -630,13 +629,13 @@ def market_heartbeat():
 
     result = {}
     for name, symbol in tickers.items():
-        hist = yf.Ticker(symbol).history(period="30d", interval = "1d")
+        hist = yf.Ticker(symbol).history(period="30d", interval="1d")
         closes = hist["Close"].tolist()
         dates = [d.strftime("%Y-%m-%d") for d in hist.index]
-        if closes: 
+        if closes:
             base = closes[0]
             result[name] = {
-                "pct": [(c-base)/base*100 for c in closes],
+                "pct": [(c - base) / base * 100 for c in closes],
                 "dates": dates,
             }
     return jsonify(result)
@@ -647,7 +646,6 @@ def market_fear_greed():
     vix = hist["Close"].iloc[-1]
     score = max(0, min(100, 100 - (vix - 10) / 30 * 100))
     return jsonify({"vix": round(vix, 2), "score": round(score, 1)})
-
 
 @api_bp.route("/market/sector-rotation")
 def market_sector_rotation():
@@ -662,8 +660,8 @@ def market_sector_rotation():
     for name, symbol in sectors.items():
         data = yf.download(symbol, period="30d", interval="1d", progress=False, auto_adjust=True)
         closes = data["Close"].squeeze().tolist()
-        if len(closes) >=2:
-            result[name] = round((closes[-1]-closes[0])/closes[0]*100,2)
+        if len(closes) >= 2:
+            result[name] = round((closes[-1] - closes[0]) / closes[0] * 100, 2)
     return jsonify(result)
 
 @api_bp.route("/market/crypto")
@@ -787,8 +785,8 @@ _CONSTELLATION_LINES = [
 
 @api_bp.route("/sky/stars")
 def sky_stars():
-    lat = float(keyring.get_password("trellis-weather", "lat") or 40.0)
-    lon = float(keyring.get_password("trellis-weather", "lon") or -74.0)
+    lat = float(get_cred("WEATHER_LAT", "trellis-weather", "lat") or 40.0)
+    lon = float(get_cred("WEATHER_LON", "trellis-weather", "lon") or -74.0)
     stars = [
         {"name": s[0], "ra": s[1], "dec": s[2], "mag": s[3], "spec": s[4]}
         for s in _BRIGHT_STARS
@@ -803,7 +801,7 @@ def sky_apod():
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if _apod_cache["date"] == today and _apod_cache["data"] is not None:
         return jsonify(_apod_cache["data"])
-    api_key = keyring.get_password("trellis-nasa", "api_key") or "DEMO_KEY"
+    api_key = get_cred("NASA_API_KEY", "trellis-nasa", "api_key") or "DEMO_KEY"
     try:
         resp = req.get("https://api.nasa.gov/planetary/apod", params={"api_key": api_key}, timeout=10)
         resp.raise_for_status()
@@ -826,8 +824,8 @@ def sky_apod():
 
 @api_bp.route("/sky/flights")
 def sky_flights():
-    lat = float(keyring.get_password("trellis-weather", "lat") or 40.0)
-    lon = float(keyring.get_password("trellis-weather", "lon") or -74.0)
+    lat = float(get_cred("WEATHER_LAT", "trellis-weather", "lat") or 40.0)
+    lon = float(get_cred("WEATHER_LON", "trellis-weather", "lon") or -74.0)
     delta = 8
     try:
         resp = req.get(
@@ -871,7 +869,7 @@ def sky_iss():
 
 @api_bp.route("/sky/neo")
 def sky_neo():
-    api_key = keyring.get_password("trellis-nasa", "api_key") or "DEMO_KEY"
+    api_key = get_cred("NASA_API_KEY", "trellis-nasa", "api_key") or "DEMO_KEY"
     today = datetime.now(timezone.utc).date()
     end = today + timedelta(days=7)
     try:
@@ -912,8 +910,8 @@ def dreams_log():
         return jsonify({"error": "date and title required"}), 400
     now = datetime.now(timezone.utc)
     timestamp = datetime.fromisoformat(date).replace(
-        tzinfo = timezone.utc,
-        hour = now.hour, minute = now.minute, second = now.second, microsecond = now.microsecond
+        tzinfo=timezone.utc,
+        hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond
     )
     metadata = {
         "title": title,
@@ -940,7 +938,7 @@ def dreams_list():
         for r in rows
     ])
 
-@api_bp.route("/photos/log", methods = ["POST"])
+@api_bp.route("/photos/log", methods=["POST"])
 def photos_log():
     data = request.json
     date = data.get("date")
@@ -949,7 +947,7 @@ def photos_log():
         return jsonify({"error": "date and url required"}), 400
     timestamp = f"{date}T00:00:00+00:00"
     metadata = {
-        "url": url, 
+        "url": url,
         "caption": data.get("caption", ""),
     }
     with get_connection() as conn:
@@ -996,8 +994,8 @@ def letters_log():
         conn.execute(
             "INSERT INTO events (timestamp, source, event_type, metadata) VALUES (?,?,?,?)",
             (now.isoformat(), "letters", "future", json.dumps(metadata))
-        )   
-    return jsonify({"ok": True})      
+        )
+    return jsonify({"ok": True})
 
 @api_bp.route("/letters")
 def letters_list():
@@ -1016,12 +1014,12 @@ def letters_list():
             "unlock_date": meta["unlock_date"],
             "unlocked": unlocked,
             "body": meta["body"] if unlocked else None,
-        })  
+        })
     return jsonify(result)
 
 @api_bp.route("/cron/check-letters")
 def cron_check_letters():
-    import os, smtplib
+    import smtplib
     from email.mime.text import MIMEText
     secret = os.environ.get("CRON_SECRET", "")
     if request.headers.get("Authorization") != f"Bearer {secret}":
@@ -1037,8 +1035,8 @@ def cron_check_letters():
     ]
     if not to_send:
         return jsonify({"sent": 0})
-    gmail_user = "janavdshah30@gmail.com"
-    password = keyring.get_password("trellis", "gmail_app_password")
+    gmail_user = get_cred("GMAIL_USER", "trellis", "gmail_user") or "janavdshah30@gmail.com"
+    password = get_cred("GMAIL_APP_PASSWORD", "trellis", "gmail_app_password")
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(gmail_user, password)
         for letter in to_send:
@@ -1183,7 +1181,7 @@ def spotify_top_tracks():
         """
     params = []
     if cutoff:
-        query+= " AND timestamp >= ?"
+        query += " AND timestamp >= ?"
         params.append(cutoff)
     query += " GROUP BY track, artist ORDER BY plays DESC LIMIT 15"
     with get_connection() as conn:
@@ -1223,7 +1221,7 @@ def spotify_streak():
     if not days:
         return jsonify({"streak": 0, "longest": 0})
 
-    today = datetime.now().date()
+    today = datetime.now(timezone.utc).date()
     yesterday = today - timedelta(days=1)
     first = datetime.fromisoformat(days[0]).date()
 
@@ -1273,7 +1271,7 @@ def github_languages():
             FROM events
             WHERE source = 'github' AND event_type = 'commit'
         """).fetchall()
-    
+
     gh = GitHubIngester()
     totals = {}
     for row in rows:
@@ -1290,7 +1288,7 @@ def github_languages():
                     totals[lang] = totals.get(lang, 0) + b
         except Exception:
             continue
-    
+
     ranked = sorted(totals.items(), key=lambda x: x[1], reverse=True)
     return jsonify([{"language": lang, "bytes": b} for lang, b in ranked])
 
@@ -1309,13 +1307,12 @@ def create_idea():
     if not text:
         return jsonify({"error": "text required"}), 400
     status = body.get("status", "active")
-    repo   = body.get("repo") or None
+    repo = body.get("repo") or None
     with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO ideas (text, status, repo) VALUES (?, ?, ?)",
             (text, status, repo),
         )
-        conn.commit()
     return jsonify({"id": cur.lastrowid}), 201
 
 @api_bp.route("/ideas/<int:idea_id>", methods=["PATCH"])
@@ -1333,14 +1330,12 @@ def update_idea(idea_id):
     values.append(idea_id)
     with get_connection() as conn:
         conn.execute(f"UPDATE ideas SET {', '.join(fields)} WHERE id = ?", values)
-        conn.commit()
     return jsonify({"ok": True})
 
 @api_bp.route("/ideas/<int:idea_id>", methods=["DELETE"])
 def delete_idea(idea_id):
     with get_connection() as conn:
         conn.execute("DELETE FROM ideas WHERE id = ?", (idea_id,))
-        conn.commit()
     return jsonify({"ok": True})
 
 @api_bp.route("/proxy-wallpaper")
@@ -1359,14 +1354,17 @@ def proxy_wallpaper():
 
 def _ytdlp_video_url(url):
     opts = {"quiet": True, "no_warnings": True}
-    try: 
+    try:
         with YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return info.get("url")
     except Exception:
         return None
 
-_WALLPAPER_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'wallpapers')
+_WALLPAPER_DIR = os.path.join(
+    os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), '..', 'uploads')),
+    "wallpapers"
+)
 os.makedirs(_WALLPAPER_DIR, exist_ok=True)
 
 _PINTEREST_HEADERS = {
@@ -1377,8 +1375,6 @@ _PINTEREST_HEADERS = {
 }
 
 def _extract_pinterest_media(html):
-    """Pull the actual image/video URL out of a Pinterest pin page."""
-    # Video pins first
     for pattern in [
         r'property=["\']og:video:url["\'][^>]+content=["\']([^"\']+)["\']',
         r'content=["\']([^"\']+)["\'][^>]+property=["\']og:video:url["\']',
@@ -1387,8 +1383,6 @@ def _extract_pinterest_media(html):
         if m:
             return m.group(1).replace("&amp;", "&"), "video"
 
-    # og:image always points to the correct pin image (just at 736px).
-    # Upscale by swapping the size segment to "originals".
     for pattern in [
         r'property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
         r'content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
@@ -1414,7 +1408,6 @@ def wallpaper_save():
 
     content_type = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
 
-    # Pin page URL — extract the real image/video from meta tags
     if content_type.startswith("text/html"):
         video_url = _ytdlp_video_url(url)
         if video_url:
@@ -1441,7 +1434,7 @@ def wallpaper_save():
     fname = hashlib.md5(url.encode()).hexdigest() + ext
     fpath = os.path.join(_WALLPAPER_DIR, fname)
     with open(fpath, "wb") as f:
-        for chunk in r.iter_content(65536): 
+        for chunk in r.iter_content(65536):
             f.write(chunk)
 
     media_type = "video" if content_type.startswith("video/") else "image"
@@ -1458,9 +1451,12 @@ def wallpaper_upload():
         return jsonify({"error": "no file"}), 400
     content_type = f.content_type or "application/octet-stream"
     ext = mimetypes.guess_extension(content_type) or ".bin"
-    if ext == ".jpe": ext = ".jpg"
-    fname = hashlib.md5(f.filename.encode()).hexdigest() + ext
+    if ext == ".jpe":
+        ext = ".jpg"
+    content = f.read()
+    fname = hashlib.md5(content).hexdigest() + ext
     fpath = os.path.join(_WALLPAPER_DIR, fname)
-    f.save(fpath)
+    with open(fpath, "wb") as out:
+        out.write(content)
     media_type = "video" if content_type.startswith("video/") else "image"
     return jsonify({"url": f"/api/wallpaper/serve/{fname}", "type": media_type})

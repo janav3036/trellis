@@ -1,7 +1,7 @@
-import keyring
 import requests
 from datetime import date, datetime, timedelta
 from ingesters.base import Ingester
+from storage.credentials import get as get_cred
 from storage.db import DB_PATH, get_connection
 
 KEYRING_SERVICE = "trellis-weather"
@@ -12,8 +12,8 @@ DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum,weathercod
 class WeatherIngester(Ingester):
     def __init__(self):
         super().__init__(str(DB_PATH))
-        self.lat = keyring.get_password(KEYRING_SERVICE, "lat")
-        self.lon = keyring.get_password(KEYRING_SERVICE, "lon")
+        self.lat = get_cred("WEATHER_LAT", KEYRING_SERVICE, "lat")
+        self.lon = get_cred("WEATHER_LON", KEYRING_SERVICE, "lon")
 
     def _fetch_archive(self, start: date, end: date) -> dict:
         resp = requests.get(ARCHIVE_URL, params={
@@ -39,26 +39,25 @@ class WeatherIngester(Ingester):
         resp.raise_for_status()
         return resp.json()["daily"]
 
-
     def _save(self, conn, daily: dict) -> int:
         count = 0
         for i, day_str in enumerate(daily["time"]):
             ts = datetime.fromisoformat(f"{day_str}T12:00:00")
-            count+= self._insert_event(conn, timestamp=ts, source="weather", 
-                        event_type="daily", metadata={
-                            "temp_max": daily["temperature_2m_max"][i],
-                            "temp_min": daily["temperature_2m_min"][i],
-                            "precipitation": daily["precipitation_sum"][i],
-                            "weathercode": daily["weathercode"][i],
-                            "windspeed_max": daily["windspeed_10m_max"][i]
-                        })
+            count += self._insert_event(conn, timestamp=ts, source="weather",
+                event_type="daily", metadata={
+                    "temp_max": daily["temperature_2m_max"][i],
+                    "temp_min": daily["temperature_2m_min"][i],
+                    "precipitation": daily["precipitation_sum"][i],
+                    "weathercode": daily["weathercode"][i],
+                    "windspeed_max": daily["windspeed_10m_max"][i],
+                })
         return count
-    
+
     def run(self) -> int:
         daily = self._fetch_forecast(past_days=2)
         with get_connection() as conn:
             return self._save(conn, daily)
-        
+
     def backfill(self, start_date: datetime) -> int:
         start = start_date.date()
         end = date.today()

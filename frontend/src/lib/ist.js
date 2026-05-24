@@ -46,8 +46,6 @@ export function groupByDayIST(evs) {
 export function groupByWeekIST(evs) {
   const c = {};
   for (const e of evs) {
-    // Get the IST date parts
-    const istStr = new Date(e.timestamp).toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'short' });
     const istDateStr = istDate(e.timestamp);
     const dow = new Date(istDateStr + 'T12:00:00').getDay(); // 0=Sun
     const mon = new Date(istDateStr + 'T12:00:00');

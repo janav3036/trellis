@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 from ingesters.spotify import SpotifyIngester
@@ -5,10 +6,11 @@ from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
 from ingesters.calendar import CalendarIngester
 
+_log_path = os.path.join(os.path.dirname(__file__), "scheduler.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
-    handlers=[logging.FileHandler("/Users/janav/Programs/Trellis/scheduler.log", mode="a")],
+    handlers=[logging.FileHandler(_log_path, mode="a")],
 )
 log = logging.getLogger(__name__)
 

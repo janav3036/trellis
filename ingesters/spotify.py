@@ -4,25 +4,42 @@ import sqlite3
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
-import keyring
 import requests
 
 from ingesters.base import Ingester
-from storage.db import DB_PATH, get_connection
+from storage.credentials import get as get_cred
+from storage.db import DB_PATH, get_connection, get_config, set_config
 
 KEYRING_SERVICE = "trellis-spotify"
 AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 API_BASE = "https://api.spotify.com/v1"
 SCOPES = "user-read-recently-played user-read-currently-playing playlist-read-private user-library-read"
-REDIRECT_URI = "http://127.0.0.1:5000/api/callback/spotify"
+
+import os
+REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI") or "http://127.0.0.1:5000/api/callback/spotify"
 
 
 class SpotifyIngester(Ingester):
     def __init__(self):
         super().__init__(str(DB_PATH))
-        self.client_id = keyring.get_password(KEYRING_SERVICE, "client_id")
-        self.client_secret = keyring.get_password(KEYRING_SERVICE, "client_secret")
+        self.client_id     = get_cred("SPOTIFY_CLIENT_ID",     KEYRING_SERVICE, "client_id")
+        self.client_secret = get_cred("SPOTIFY_CLIENT_SECRET", KEYRING_SERVICE, "client_secret")
+
+    # ── Token helpers (DB-backed, seeded from env/keyring on first use) ──
+
+    def _get_token(self, key: str) -> str | None:
+        val = get_config(f"spotify.{key}")
+        if val:
+            return val
+        env_map = {"access_token": "SPOTIFY_ACCESS_TOKEN", "refresh_token": "SPOTIFY_REFRESH_TOKEN"}
+        val = get_cred(env_map[key], KEYRING_SERVICE, key)
+        if val:
+            set_config(f"spotify.{key}", val)
+        return val
+
+    def _set_token(self, key: str, value: str) -> None:
+        set_config(f"spotify.{key}", value)
 
     def get_auth_url(self) -> str:
         params = {
@@ -48,11 +65,11 @@ class SpotifyIngester(Ingester):
         )
         resp.raise_for_status()
         tokens = resp.json()
-        keyring.set_password(KEYRING_SERVICE, "access_token", tokens["access_token"])
-        keyring.set_password(KEYRING_SERVICE, "refresh_token", tokens["refresh_token"])
+        self._set_token("access_token", tokens["access_token"])
+        self._set_token("refresh_token", tokens["refresh_token"])
 
     def _refresh_token(self) -> str:
-        refresh_token = keyring.get_password(KEYRING_SERVICE, "refresh_token")
+        refresh_token = self._get_token("refresh_token")
         credentials = base64.b64encode(
             f"{self.client_id}:{self.client_secret}".encode()
         ).decode()
@@ -63,15 +80,11 @@ class SpotifyIngester(Ingester):
         )
         resp.raise_for_status()
         new_token = resp.json()["access_token"]
-        try:
-            keyring.delete_password(KEYRING_SERVICE, "access_token")
-        except Exception:
-            pass
-        keyring.set_password(KEYRING_SERVICE, "access_token", new_token)
+        self._set_token("access_token", new_token)
         return new_token
 
     def _get_headers(self) -> dict:
-        token = keyring.get_password(KEYRING_SERVICE, "access_token")
+        token = self._get_token("access_token")
         return {"Authorization": f"Bearer {token}"}
 
     def _fetch_recent_plays(self, limit: int = 50, before: int | None = None) -> list:
@@ -100,7 +113,7 @@ class SpotifyIngester(Ingester):
             played_at = datetime.fromisoformat(
                 item["played_at"].replace("Z", "+00:00")
             )
-            count+=self._insert_event(
+            count += self._insert_event(
                 conn,
                 timestamp=played_at,
                 source="spotify",
