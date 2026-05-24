@@ -18,4 +18,6 @@ RUN cd frontend && npm run build
 
 COPY . .
 
-CMD ["sh", "-c", "gunicorn 'server.app:create_app()' --bind 0.0.0.0:$PORT --workers 2 --timeout 120"]
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+CMD ["/app/start.sh"]
