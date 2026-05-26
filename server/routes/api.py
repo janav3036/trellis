@@ -1312,7 +1312,7 @@ def github_languages():
 def get_ideas():
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT id, text, status, repo, created_at FROM ideas ORDER BY created_at DESC"
+            "SELECT id, text, description, status, repo, created_at FROM ideas ORDER BY created_at DESC"
         ).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -1341,6 +1341,8 @@ def update_idea(idea_id):
         fields.append("repo = ?"); values.append(body["repo"] or None)
     if "text" in body:
         fields.append("text = ?"); values.append(body["text"])
+    if "description" in body:
+        fields.append("description = ?"); values.append(body["description"])
     if not fields:
         return jsonify({"error": "nothing to update"}), 400
     values.append(idea_id)

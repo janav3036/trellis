@@ -15,6 +15,11 @@
   let backfillDate  = '';
   let backfillStatus = '';
   let newIdea       = '';
+  let editingId     = null;
+  let editText      = '';
+  let editDesc      = '';
+
+  const focusOnMount = (node) => { setTimeout(() => node.focus(), 0); };
 
   const RANGES = [
     { key: 'daily',   label: 'Today' },
@@ -186,6 +191,30 @@
   async function deleteIdea(id) {
     await fetch(`/api/ideas/${id}`, { method:'DELETE' });
     ideas = ideas.filter(i => i.id !== id);
+  }
+
+  function startEdit(idea) {
+    editingId = idea.id;
+    editText  = idea.text;
+    editDesc  = idea.description || '';
+  }
+
+  async function saveEdit(id) {
+    const text = editText.trim();
+    if (!text) { cancelEdit(); return; }
+    const description = editDesc.trim();
+    await fetch(`/api/ideas/${id}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, description }),
+    });
+    ideas = ideas.map(i => i.id === id ? { ...i, text, description } : i);
+    cancelEdit();
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    editText  = '';
+    editDesc  = '';
   }
 
   onMount(async () => {
@@ -365,7 +394,37 @@
               class="text-[10px] px-1.5 py-0.5 rounded shrink-0 font-medium mt-0.5"
               style="background:{STATUS_STYLE[idea.status]?.bg}; color:{STATUS_STYLE[idea.status]?.color}"
             >{idea.status}</button>
-            <span class="text-xs flex-1 leading-snug">{idea.text}</span>
+            {#if editingId === idea.id}
+              <div class="flex flex-col gap-1 flex-1 min-w-0">
+                <input
+                  class="text-xs rounded px-1.5 py-0.5 border leading-snug"
+                  style="background:#0d1117; color:#e6edf3; border-color:#30363d; outline:none"
+                  bind:value={editText}
+                  placeholder="Idea…"
+                  on:keydown={e => { if (e.key === 'Escape') cancelEdit(); }}
+                  use:focusOnMount
+                />
+                <input
+                  class="text-xs rounded px-1.5 py-0.5 border leading-snug"
+                  style="background:#0d1117; color:#8b949e; border-color:#30363d; outline:none"
+                  bind:value={editDesc}
+                  placeholder="Description…"
+                  on:keydown={e => { if (e.key === 'Enter') saveEdit(idea.id); if (e.key === 'Escape') cancelEdit(); }}
+                  on:blur={() => saveEdit(idea.id)}
+                />
+              </div>
+            {:else}
+              <div
+                class="flex flex-col flex-1 min-w-0 cursor-text"
+                on:dblclick={() => startEdit(idea)}
+                title="Double-click to edit"
+              >
+                <span class="text-xs leading-snug">{idea.text}</span>
+                {#if idea.description}
+                  <span class="text-[10px] leading-snug mt-0.5" style="color:#8b949e">{idea.description}</span>
+                {/if}
+              </div>
+            {/if}
             <!-- Delete -->
             <button
               on:click={() => deleteIdea(idea.id)}

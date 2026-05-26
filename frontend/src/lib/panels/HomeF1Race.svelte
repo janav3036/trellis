@@ -96,7 +96,10 @@
     return `In ${days} days`;
   }
 
-  $: allPhotos = [...racePhotos].sort((a, b) => b.round - a.round);
+  // Only show photos tagged to the next race; fall back to most-recent if none exist
+  $: allPhotos = nextRace
+    ? racePhotos.filter(p => String(p.round) === String(nextRace.round))
+    : [];
   let photoIdx = 0;
   $: if (allPhotos.length && photoIdx >= allPhotos.length) photoIdx = 0;
 

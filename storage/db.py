@@ -16,6 +16,10 @@ def apply_schema() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with get_connection() as conn:
         conn.executescript(SCHEMA_PATH.read_text())
+        try:
+            conn.execute("ALTER TABLE ideas ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
 
 def get_config(key: str) -> str | None:
     with get_connection() as conn:

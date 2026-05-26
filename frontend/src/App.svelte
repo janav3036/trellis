@@ -12,6 +12,7 @@ import F1      from './pages/F1.svelte'
 import Journal from './pages/Journal.svelte'
 import Market  from './pages/Market.svelte'
 import Sky     from './pages/Sky.svelte'
+import Chat    from './pages/Chat.svelte'
 
 let authed = !!sessionStorage.getItem('trellis_authed');
 let authChecked = true;
@@ -34,6 +35,7 @@ const routes = {
   '/journal': Journal,
   '/market':  Market,
   '/sky':     Sky,
+  '/chat':    Chat,
 }
 </script>
 

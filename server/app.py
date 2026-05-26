@@ -3,6 +3,7 @@ import secrets
 import socket
 from flask import Flask, send_from_directory
 from server.routes.api import api_bp
+from server.routes.noterag import noterag_bp
 from storage.credentials import get as get_cred
 from storage.db import apply_schema
 
@@ -30,6 +31,7 @@ def create_app():
     app.secret_key = _get_secret_key()
     app.config["SESSION_PERMANENT"] = False
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(noterag_bp, url_prefix="/api/noterag")
 
     @app.route("/health")
     def health():
