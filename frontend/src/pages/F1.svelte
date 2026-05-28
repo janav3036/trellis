@@ -771,4 +771,38 @@
   .res-right  { text-align: right; flex-shrink: 0; }
   .res-pts    { font-size: 12px; color: #555; font-variant-numeric: tabular-nums; }
   .res-status { font-size: 10px; color: #3a3a40; margin-top: 1px; }
+
+  @media (max-width: 768px) {
+    .f1-root {
+      padding: 14px 14px 0;
+    }
+
+    .bento {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+
+    .cell {
+      grid-column: unset !important;
+      grid-row: unset !important;
+      height: auto !important;
+      min-height: 180px;
+    }
+
+    /* Season calendar: horizontal scroll strip */
+    .cal-grid {
+      display: flex !important;
+      overflow-x: auto !important;
+      gap: 8px !important;
+      padding-bottom: 6px;
+      scrollbar-width: none;
+    }
+    .cal-grid::-webkit-scrollbar { display: none; }
+
+    .cal-card {
+      min-width: 76px;
+      flex-shrink: 0 !important;
+    }
+  }
 </style>

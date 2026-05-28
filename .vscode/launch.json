@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Flask",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "flask",
+            "args": ["--app", "server.app", "run", "--port", "5000", "--host", "127.0.0.1"],
+            "jinja": true,
+            "env": {
+                "FLASK_ENV": "development",
+                "PYTHONUNBUFFERED": "1",
+                "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"
+            },
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

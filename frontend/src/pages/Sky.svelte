@@ -337,4 +337,25 @@
     padding: 2px 6px;
     box-shadow: none;
   }
+
+  @media (max-width: 768px) {
+    main {
+      padding: 14px 14px 0 !important;
+    }
+    main > .grid {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+    main > .grid > div {
+      grid-column: unset !important;
+      grid-row: unset !important;
+      height: auto !important;
+      min-height: 200px;
+    }
+    main > div:first-child {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+  }
 </style>

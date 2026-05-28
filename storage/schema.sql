@@ -49,3 +49,25 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     text        TEXT NOT NULL,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS whatsapp_chats (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_name     TEXT NOT NULL UNIQUE,
+    file_name     TEXT NOT NULL,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    participants  TEXT NOT NULL DEFAULT '[]',
+    date_from     TEXT,
+    date_to       TEXT,
+    ingested_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_name  TEXT NOT NULL REFERENCES whatsapp_chats(chat_name) ON DELETE CASCADE,
+    timestamp  TEXT NOT NULL,
+    sender     TEXT NOT NULL,
+    message    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_wa_messages_chat ON whatsapp_messages(chat_name);
+CREATE INDEX IF NOT EXISTS idx_wa_messages_ts   ON whatsapp_messages(timestamp);

@@ -164,6 +164,23 @@
     filter: blur(38px) brightness(0.58) saturate(1.35);
     transform: scale(1.08);
   }
+
+  /* Rotate landscape wallpapers on portrait mobile */
+  @media (max-width: 768px) and (orientation: portrait) {
+    .wall:not(.fallback) {
+      inset: auto;
+      top: 50%;
+      left: 50%;
+      width: 100vh;
+      height: 100vw;
+      transform: translate(-50%, -50%) rotate(90deg);
+      background-size: cover;
+    }
+    .wall.blurred:not(.fallback) {
+      filter: blur(38px) brightness(0.58) saturate(1.35);
+      transform: translate(-50%, -50%) rotate(90deg) scale(1.08);
+    }
+  }
   .fallback {
     background:
       radial-gradient(ellipse at 28% 22%, rgba(100, 65, 20, 0.85) 0%, transparent 52%),
@@ -266,6 +283,11 @@
   @keyframes float {
     0%, 100% { transform: translateX(-50%) translateY(0px); }
     50%       { transform: translateX(-50%) translateY(-9px); }
+  }
+
+  /* Login is full-screen; no bottom nav clearance needed */
+  @media (max-width: 768px) {
+    .stage { padding-bottom: 0 !important; }
   }
 
   /* ── Panel ──────────────────────────────────────────────────────────────── */

@@ -298,6 +298,61 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
+  /* ── Mobile ──────────────────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .page {
+      padding: 16px 14px 0;
+    }
+
+    .hdr {
+      margin-bottom: 0;
+      padding-bottom: 11px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      margin-bottom: 12px;
+    }
+
+    .brand {
+      font-size: 1.15rem;
+      letter-spacing: 0.24em;
+    }
+
+    .date {
+      font-family: 'DM Mono', ui-monospace, monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .hdr-rule {
+      display: none;
+    }
+
+    .edit-link {
+      font-family: 'DM Mono', ui-monospace, monospace;
+      font-size: 0.58rem;
+      letter-spacing: 0.03em;
+    }
+
+    .grid {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+      grid-template-rows: unset !important;
+    }
+
+    .cell {
+      width: 100% !important;
+      height: auto !important;
+      min-height: 110px;
+      grid-column: unset !important;
+      grid-row: unset !important;
+    }
+
+    .chat-cell {
+      min-height: 300px;
+    }
+  }
+
   /* ── NoteRAG mini-chat ───────────────────────────────────────────────────── */
   .chat-cell {
     background: var(--surface);
