@@ -1552,4 +1552,32 @@
     text-transform: capitalize;
     letter-spacing: 0.04em;
   }
+
+  @media (max-width: 768px) {
+    .j-root {
+      padding: 14px 14px 0;
+    }
+
+    .j-bento {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+      grid-template-rows: unset !important;
+    }
+
+    .j-cell {
+      grid-column: unset !important;
+      grid-row: unset !important;
+      height: auto !important;
+      min-height: 160px;
+    }
+
+    .dreams-cell {
+      min-height: 340px;
+    }
+
+    .habits-cell {
+      min-height: 240px;
+    }
+  }
 </style>

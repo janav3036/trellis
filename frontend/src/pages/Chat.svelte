@@ -48,6 +48,10 @@
   let editTitle    = '';
   let editEl;
 
+  // Mobile sidebar
+  let sidebarOpen = false;
+  function closeSidebar() { sidebarOpen = false; }
+
   // Settings drawer
   let showSettings     = false;
   let settingsTab      = 'profile';
@@ -361,8 +365,13 @@
 
 <div class="shell">
 
+  <!-- Mobile sidebar overlay -->
+  {#if sidebarOpen}
+    <div class="mob-overlay" on:click={closeSidebar} role="presentation" />
+  {/if}
+
   <!-- ═══ SIDEBAR ══════════════════════════════════════════════════════════════ -->
-  <aside class="sidebar">
+  <aside class="sidebar" class:mob-open={sidebarOpen}>
     <div class="sidebar-top">
       <button class="new-btn" on:click={newChat}>
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -377,7 +386,7 @@
         <button
           class="session-row {s.id === activeId ? 'is-active' : ''}"
           style="animation-delay:{i * 25}ms"
-          on:click={() => loadSession(s.id)}
+          on:click={() => { loadSession(s.id); closeSidebar(); }}
           on:dblclick={e => startRename(s, e)}
           on:mouseenter={() => hoveredId = s.id}
           on:mouseleave={() => hoveredId = null}
@@ -431,6 +440,12 @@
 
     <!-- Header -->
     <header class="chat-hdr">
+      <!-- Mobile: hamburger to open session list -->
+      <button class="mob-menu-btn" on:click={() => sidebarOpen = !sidebarOpen} aria-label="Sessions">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="14" y2="8"/><line x1="2" y1="12" x2="14" y2="12"/>
+        </svg>
+      </button>
       <div class="hdr-left">
         <span class="hdr-name">NoteRAG</span>
         <span class="hdr-pill">
@@ -810,6 +825,90 @@
 
   .reindex-btn:not(:disabled):hover { color: #c8a97a; border-color: #c8a97a44; }
   .reindex-btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* Mobile hamburger button */
+  .mob-menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: #6a5a48;
+    cursor: pointer;
+    border-radius: 6px;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+  }
+  .mob-menu-btn:hover { color: #c8a97a; background: #1a1610; }
+
+  .mob-overlay {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .shell {
+      height: calc(100dvh - 40px - env(safe-area-inset-bottom, 0px));
+    }
+
+    .mob-menu-btn {
+      display: flex;
+    }
+
+    .mob-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 149;
+      background: rgba(0,0,0,0.5);
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 150;
+      transform: translateX(-100%);
+      transition: transform 0.25s cubic-bezier(0.32,0.72,0,1);
+      box-shadow: none;
+    }
+
+    .sidebar.mob-open {
+      transform: translateX(0);
+      box-shadow: 4px 0 32px rgba(0,0,0,0.5);
+    }
+
+    .chat-col {
+      width: 100%;
+    }
+
+    .chat-hdr {
+      padding: 10px 12px;
+      gap: 8px;
+    }
+
+    .row {
+      padding: 5px 12px;
+    }
+
+    .bubble-user, .bubble-assistant {
+      max-width: 85%;
+    }
+
+    .drawer {
+      width: min(360px, 92vw);
+    }
+
+    .input-dock {
+      padding: 10px 14px 8px;
+    }
+
+    .input-hint {
+      display: none;
+    }
+  }
 
   /* Messages */
   .msgs {

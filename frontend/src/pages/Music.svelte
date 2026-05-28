@@ -195,3 +195,32 @@
     </div>
   </div>
 </main>
+
+<style>
+  @media (max-width: 768px) {
+    main {
+      padding: 14px 14px 0 !important;
+    }
+    main > div:first-child {
+      margin-bottom: 12px;
+    }
+    main > div:first-child h1 {
+      font-size: 1.3rem !important;
+    }
+    main > div:first-child > div {
+      flex-wrap: wrap;
+      gap: 8px !important;
+    }
+    main .grid {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+    main .grid > div {
+      grid-column: unset !important;
+      grid-row: unset !important;
+      height: auto !important;
+      min-height: 130px;
+    }
+  }
+</style>

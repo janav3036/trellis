@@ -135,6 +135,7 @@
       [{ x:dates, y:dates.map(d=>counts[d]||0), type:'bar', marker:{ color:'#3fb950' } }],
       { ...plotLayout, title:{ text:title, font:{ color:'#e6edf3', size:12 } } }
     );
+    requestAnimationFrame(() => { if (chartEl) Plotly.Plots.resize(chartEl); });
   }
 
   function timeAgo(ts) {
@@ -307,7 +308,7 @@
     </div>
 
     <!-- ── Commits chart: cols 1-13, row 2 ── -->
-    <div class="rounded-xl p-4 flex flex-col overflow-hidden"
+    <div class="rounded-xl p-4 flex flex-col overflow-hidden chart-cell"
          style="grid-column:1/14; grid-row:2; background:#161b22">
       <div class="flex items-center gap-1.5 mb-3 shrink-0">
         <div class="text-xs font-semibold uppercase tracking-wider flex-1" style="color:#8b949e">Commits</div>
@@ -548,3 +549,39 @@
 
   </div>
 </main>
+
+<style>
+  @media (max-width: 768px) {
+    main {
+      padding: 14px 14px 0 !important;
+    }
+    main > .grid {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+    main > .grid > * {
+      grid-column: unset !important;
+      grid-row: unset !important;
+      height: auto !important;
+      min-height: 80px;
+    }
+    main > .grid > div:first-child {
+      flex-wrap: wrap;
+      gap: 6px !important;
+      min-height: auto !important;
+    }
+    main > .grid > div:first-child .ml-auto {
+      flex-wrap: wrap;
+      margin-left: 0 !important;
+      width: 100%;
+    }
+    /* Plotly chart card: needs fixed height so flex-1 child isn't 0 */
+    .chart-cell {
+      min-height: 260px;
+    }
+    .chart-cell .flex-1 {
+      min-height: 200px;
+    }
+  }
+</style>

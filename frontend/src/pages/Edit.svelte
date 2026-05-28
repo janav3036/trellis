@@ -135,13 +135,21 @@
       saving = false;
     }
   } else {
-    const reader = new FileReader();
-    reader.onload = async ev => {
-      const src = ev.target.result;
-      themeStore.updateCustom({ bgMedia: src, bgMediaType: 'image' });
-      await applyExtractedColors(src);
-    };
-    reader.readAsDataURL(file);
+    saving = true;
+    saveErr = '';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/wallpaper/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { saveErr = data.error || 'Upload failed'; return; }
+      themeStore.updateCustom({ bgMedia: data.url, bgMediaType: 'image' });
+      await applyExtractedColors(data.url);
+    } catch {
+      saveErr = 'Upload failed';
+    } finally {
+      saving = false;
+    }
   }
 }
 
@@ -354,3 +362,14 @@
 
   </div>
 </main>
+
+<style>
+  @media (max-width: 768px) {
+    main {
+      padding: 14px 14px 0 !important;
+    }
+    main > div:first-child {
+      margin-bottom: 16px !important;
+    }
+  }
+</style>

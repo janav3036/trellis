@@ -15,6 +15,7 @@ frontend/dist/
 # Secrets
 .env
 credentials.json
+storage/.secret_key
 
 # macOS
 .DS_Store
@@ -24,3 +25,9 @@ credentials.json
 
 # Data files
 data/
+
+# Uploads (user-generated media)
+server/uploads/
+
+# Runtime state
+storage/theme.json

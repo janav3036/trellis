@@ -492,4 +492,28 @@
     font-weight: 400;
     opacity: 0.5;
   }
+
+  @media (max-width: 768px) {
+    .mkt-page {
+      padding: 14px 14px 0 !important;
+    }
+    .mkt-page > .grid {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+    .mkt-page > .grid > .panel {
+      grid-column: unset !important;
+      grid-row: unset !important;
+      height: auto !important;
+      min-height: 200px;
+    }
+    .mkt-page > div:first-child {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .mkt-h1 {
+      font-size: 1.5rem !important;
+    }
+  }
 </style>

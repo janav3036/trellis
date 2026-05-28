@@ -1074,4 +1074,46 @@
 <style>
   .no-scroll { scrollbar-width: none; }
   .no-scroll::-webkit-scrollbar { display: none; }
+
+  @media (max-width: 768px) {
+    main {
+      padding: 14px 14px 0 !important;
+    }
+
+    main > .grid {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+
+    main > .grid > div,
+    main > .grid > .rounded-2xl {
+      grid-column: unset !important;
+      grid-row: unset !important;
+      width: 100% !important;
+      height: auto !important;
+      min-height: 240px;
+    }
+
+    main > .grid > div[style*="grid-column:1/8"] {
+      min-height: 380px;
+    }
+
+    main > .grid > .rounded-2xl {
+      min-height: 320px;
+    }
+
+    main div[style*="grid-template-columns: 300px"],
+    main div[style*="grid-template-columns: 1fr 300px"],
+    main div[style*="grid-template-columns:repeat(6,1fr)"] {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+
+    /* Header */
+    main > div:first-child {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+  }
 </style>

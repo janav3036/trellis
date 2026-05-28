@@ -4,7 +4,8 @@ import socket
 from flask import Flask, send_from_directory
 from server.routes.api import api_bp
 from server.routes.noterag import noterag_bp
-from storage.credentials import get as get_cred
+from server.routes.chatstats import chatstats_bp
+from server.routes.theme import theme_bp
 from storage.db import apply_schema
 
 _orig_getaddrinfo = socket.getaddrinfo
@@ -14,15 +15,22 @@ socket.getaddrinfo = _getaddrinfo_ipv4
 
 _FRONTEND_DIST = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', 'dist'))
 
+_SECRET_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'storage', '.secret_key')
+
 def _get_secret_key():
-    key = get_cred("FLASK_SECRET_KEY", "trellis", "flask_secret_key")
-    if not key:
-        key = secrets.token_hex(32)
-        try:
-            import keyring
-            keyring.set_password("trellis", "flask_secret_key", key)
-        except Exception:
-            pass
+    env_key = os.environ.get("FLASK_SECRET_KEY")
+    if env_key:
+        return env_key
+    try:
+        with open(_SECRET_KEY_FILE) as f:
+            key = f.read().strip()
+        if key:
+            return key
+    except FileNotFoundError:
+        pass
+    key = secrets.token_hex(32)
+    with open(_SECRET_KEY_FILE, 'w') as f:
+        f.write(key)
     return key
 
 def create_app():
@@ -32,6 +40,8 @@ def create_app():
     app.config["SESSION_PERMANENT"] = False
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(noterag_bp, url_prefix="/api/noterag")
+    app.register_blueprint(theme_bp)
+    app.register_blueprint(chatstats_bp, url_prefix="/api/chats")
 
     @app.route("/health")
     def health():
@@ -51,4 +61,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, port=5000)
+    app.run(debug=True, use_reloader=False, port=5000)

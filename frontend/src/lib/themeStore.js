@@ -32,16 +32,19 @@ function applyColors(c) {
   document.body.style.backgroundColor = c.bg;
 }
 
-function loadState() {
+function mergeState(raw) {
+  return {
+    ...DEFAULT_STATE,
+    ...raw,
+    custom: { ...DEFAULT_STATE.custom, ...raw?.custom },
+  };
+}
+
+function loadLocal() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULT_STATE;
-    const parsed = JSON.parse(raw);
-    return {
-      ...DEFAULT_STATE,
-      ...parsed,
-      custom: { ...DEFAULT_STATE.custom, ...parsed.custom },
-    };
+    return mergeState(JSON.parse(raw));
   } catch {
     return DEFAULT_STATE;
   }
@@ -51,17 +54,43 @@ function persist(state) {
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch {
-    // Large data URL may overflow localStorage — save without bgMedia
     const safe = { ...state, custom: { ...state.custom, bgMedia: null, bgMediaType: null } };
     localStorage.setItem(KEY, JSON.stringify(safe));
   }
 }
 
+async function fetchFromServer() {
+  try {
+    const res = await fetch('/api/theme');
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function saveToServer(state) {
+  fetch('/api/theme', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(state),
+  }).catch(() => {});
+}
+
 function createThemeStore() {
-  const initial = loadState();
+  const initial = loadLocal();
   applyColors(initial.preset === 'custom' ? initial.custom : (PRESETS[initial.preset] || PRESETS.warm));
 
-  const { subscribe, update } = writable(initial);
+  const { subscribe, update, set } = writable(initial);
+
+  // Pull authoritative state from server — applies once page has loaded
+  fetchFromServer().then(serverRaw => {
+    if (!serverRaw || !serverRaw.preset) return;
+    const serverState = mergeState(serverRaw);
+    persist(serverState);
+    set(serverState);
+    applyColors(serverState.preset === 'custom' ? serverState.custom : (PRESETS[serverState.preset] || PRESETS.warm));
+  });
 
   return {
     subscribe,
@@ -70,6 +99,7 @@ function createThemeStore() {
         const next = { ...s, preset: name };
         applyColors(PRESETS[name]);
         persist(next);
+        saveToServer(next);
         return next;
       });
     },
@@ -79,6 +109,7 @@ function createThemeStore() {
         const next = { preset: 'custom', custom };
         applyColors(custom);
         persist(next);
+        saveToServer(next);
         return next;
       });
     },

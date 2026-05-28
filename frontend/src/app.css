@@ -38,3 +38,10 @@ body {
 
 /* When a wallpaper is active, body becomes transparent so the fixed image shows through */
 .has-wallpaper body  { background-color: transparent !important; }
+
+/* ── Mobile global ───────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  body {
+    padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+}

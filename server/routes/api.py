@@ -61,11 +61,17 @@ def auth_change_password():
         pass
     return jsonify({"ok": True})
 
-cloudinary.config(
-    cloud_name=get_cred("CLOUDINARY_CLOUD_NAME", "trellis", "cloudinary_cloud_name"),
-    api_key=get_cred("CLOUDINARY_API_KEY",       "trellis", "cloudinary_api_key"),
-    api_secret=get_cred("CLOUDINARY_API_SECRET", "trellis", "cloudinary_api_secret"),
-)
+_cloudinary_configured = False
+
+def _ensure_cloudinary():
+    global _cloudinary_configured
+    if not _cloudinary_configured:
+        cloudinary.config(
+            cloud_name=get_cred("CLOUDINARY_CLOUD_NAME", "trellis", "cloudinary_cloud_name"),
+            api_key=get_cred("CLOUDINARY_API_KEY",       "trellis", "cloudinary_api_key"),
+            api_secret=get_cred("CLOUDINARY_API_SECRET", "trellis", "cloudinary_api_secret"),
+        )
+        _cloudinary_configured = True
 
 def _spotify_cutoff(range_: str) -> str | None:
     now = datetime.now(timezone.utc)
@@ -492,31 +498,53 @@ def f1_standings():
 
 @api_bp.route("/f1/season-arc")
 def f1_season_arc():
-    resp = req.get("https://api.jolpi.ca/ergast/f1/current/results.json?limit=1000", timeout=15)
-    resp.raise_for_status()
-    races = resp.json()["MRData"]["RaceTable"]["Races"]
+    from datetime import date
+
+    sched = req.get("https://api.jolpi.ca/ergast/f1/current.json", timeout=10)
+    sched.raise_for_status()
+    all_races = sched.json()["MRData"]["RaceTable"]["Races"]
+
+    today = date.today().isoformat()
+    completed = [r for r in all_races if r["date"] <= today]
+
+    results_by_round = {}
+    for race in completed:
+        rnd = race["round"]
+        try:
+            r = req.get(
+                f"https://api.jolpi.ca/ergast/f1/current/{rnd}/driverStandings.json",
+                timeout=10,
+            )
+            r.raise_for_status()
+            lists = r.json()["MRData"]["StandingsTable"]["StandingsLists"]
+            if lists:
+                results_by_round[int(rnd)] = (race, lists[0]["DriverStandings"])
+        except Exception:
+            pass
 
     race_names = []
-    driver_points = {}
-
-    for race in races:
+    driver_series = {}
+    for rnd in sorted(results_by_round):
+        race, standings = results_by_round[rnd]
         race_names.append(race["raceName"].replace(" Grand Prix", " GP"))
-        for result in race.get("Results", []):
-            name = f"{result['Driver']['givenName']} {result['Driver']['familyName']}"
-            pts = float(result["points"])
-            prev = driver_points.get(name, [])
-            prev_total = prev[-1] if prev else 0
-            while len(prev) < len(race_names) - 1:
-                prev.append(prev[-1] if prev else 0)
-            prev.append(prev_total + pts)
-            driver_points[name] = prev
+        for s in standings:
+            name = f"{s['Driver']['givenName']} {s['Driver']['familyName']}"
+            if name not in driver_series:
+                driver_series[name] = []
+            driver_series[name].append(float(s["points"]))
 
-    final = {d: pts[-1] for d, pts in driver_points.items()}
+    n = len(race_names)
+    for name in driver_series:
+        arr = driver_series[name]
+        while len(arr) < n:
+            arr.append(arr[-1] if arr else 0)
+
+    final = {d: pts[-1] for d, pts in driver_series.items()}
     top5 = sorted(final, key=final.get, reverse=True)[:5]
 
     return jsonify({
         "races": race_names,
-        "drivers": {d: driver_points[d] for d in top5}
+        "drivers": {d: driver_series[d] for d in top5}
     })
 
 @api_bp.route("/f1/news")
@@ -574,6 +602,7 @@ def f1_race_results(round):
 def f1_photos_upload():
     if "file" not in request.files:
         return jsonify({"error": "no file"}), 400
+    _ensure_cloudinary()
     result = cloudinary.uploader.upload(
         request.files["file"],
         folder="trellis/f1-photos",
@@ -974,6 +1003,7 @@ def photos_list():
 def photos_upload():
     if "file" not in request.files:
         return jsonify({"error": "no file"}), 400
+    _ensure_cloudinary()
     result = cloudinary.uploader.upload(
         request.files["file"],
         folder="trellis/photos",
