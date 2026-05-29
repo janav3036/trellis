@@ -71,7 +71,11 @@ def report(chat_name):
     if not stats:
         return jsonify({"error": "chat not found or empty"}), 404
     html = generate_report(stats)
-    return Response(html, mimetype='text/html')
+    resp = Response(html, mimetype='text/html')
+    if request.args.get('download'):
+        safe = chat_name.replace('/', '-').replace('\\', '-')
+        resp.headers['Content-Disposition'] = f'attachment; filename="{safe}.html"'
+    return resp
 
 @chatstats_bp.route('/<chat_name>', methods=["DELETE"])
 def delete_chat(chat_name):

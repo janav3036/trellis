@@ -27,7 +27,8 @@ def parse(filepath: str, chat_name: str) -> list[dict]:
     messages = []
     current = None
 
-    for line in Path(filepath).read_text(encoding='utf-8', errors='replace').splitlines():
+    for raw in Path(filepath).read_text(encoding='utf-8', errors='replace').splitlines():
+        line = raw.lstrip('\u200e\u200f\u202a\u202c')
         m = _IOS.match(line)
         if m:
             if current:
