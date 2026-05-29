@@ -24,7 +24,7 @@ def chat():
     if not query:
         return jsonify({"error": "query required"}), 400
 
-    chunks = retriever.retrieve(query, n=5)
+    chunks = retriever.retrieve(query, n=8)
 
     def generate():
         yield f"SOURCES:{json.dumps([c['metadata'] for c in chunks])}\n"

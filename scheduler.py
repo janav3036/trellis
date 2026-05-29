@@ -5,6 +5,7 @@ from ingesters.spotify import SpotifyIngester
 from ingesters.github import GitHubIngester
 from ingesters.weather import WeatherIngester
 from ingesters.calendar import CalendarIngester
+from noterag.indexer import index_events
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +36,9 @@ def weather_daily():
 def calendar_daily():
     log.info("calendar daily: %d new events", CalendarIngester().run())
 
+def noterag_index():
+    log.info("noterag index: %d new chunks embedded", index_events())
+
 
 JOBS = {
     "spotify_1pm": spotify_1pm,
@@ -44,6 +48,7 @@ JOBS = {
     "github_nightly": github_nightly,
     "weather_daily": weather_daily,
     "calendar_daily": calendar_daily,
+    "noterag_index": noterag_index,
 }
 
 if __name__ == "__main__":

@@ -1309,6 +1309,80 @@ def spotify_heatmap():
         """).fetchall()
     return jsonify([dict(r) for r in rows])
 
+@api_bp.route("/spotify/archaeology")
+def spotify_archaeology():
+    from collections import defaultdict
+    from datetime import datetime
+
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT
+                timestamp,
+                json_extract(metadata, '$.track_name') as track,
+                json_extract(metadata, '$.artist')     as artist
+            FROM events
+            WHERE source = 'spotify' AND event_type = 'play'
+            ORDER BY timestamp
+
+    """).fetchall()
+        
+    weeks = defaultdict(lambda: {"plays": [], "weather": None})
+
+    for row in rows:
+        dt = datetime.fromisoformat(row["timestamp"])
+        year, week, _ = dt.isocalendar()
+        key = f"{year}-W{week:02d}"
+        weeks[key]["plays"].append((row["track"], row["artist"]))
+
+    with get_connection() as conn:
+        weather_rows = conn.execute("""
+            SELECT
+                strftime('%Y-W%W', timestamp) as week_key,
+                json_extract(metadata, '$.weathercode') as weathercode
+            FROM events
+            WHERE source = 'weather' AND event_type = 'daily'
+        """).fetchall()
+
+    for w in weather_rows:
+        key = w["week_key"]
+        if key in weeks and weeks[key]["weather"] is None:
+            weeks[key]["weather"] = w["weathercode"]
+
+    from collections import Counter
+
+    sorted_keys = sorted(weeks.keys())
+    result = []
+
+    for key in sorted_keys:
+        data = weeks[key]
+        plays = data["plays"]
+        artist_counts = Counter(artist for _, artist in plays)
+        track_counts  = Counter(track  for track, _ in plays)
+        top_artist = artist_counts.most_common(1)[0][0] if artist_counts else "Unknown"
+        top_tracks = [t for t, _ in track_counts.most_common(3)]
+        result.append({
+            "week":       key,
+            "play_count": len(plays),
+            "top_artist": top_artist,
+            "top_tracks": top_tracks,
+            "weathercode": data["weather"],
+            "chapter":    None,
+        })
+
+    i = 0
+    while i < len(result):
+        j = i + 1
+        while j < len(result) and result[j]["top_artist"] == result[i]["top_artist"]:
+            j += 1
+        if j - i >= 3:
+            name = result[i]["top_artist"]
+            for k in range(i, j):
+                result[k]["chapter"] = name
+        i = j
+
+    return jsonify(result)
+
+
 @api_bp.route("/github/languages")
 def github_languages():
     with get_connection() as conn:

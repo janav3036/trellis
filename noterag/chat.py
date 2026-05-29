@@ -1,5 +1,6 @@
 import json
 import requests
+from datetime import date
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "qwen2.5:7b"
@@ -8,8 +9,10 @@ RELEVANCE_THRESHOLD = 0.85
 
 def _build_system(chunks: list[dict], profile: str = "", custom_prompt: str = "") -> str:
     use_sources = bool(chunks) and chunks[0]["distance"] < RELEVANCE_THRESHOLD
+    today = date.today().strftime("%B %d, %Y")
 
     parts = [
+        f"Today's date is {today}.\n"
         "You are a thoughtful personal assistant who knows the user well through their private logs, journals, and notes.\n"
         "Respond in a warm, conversational tone — like a close friend who's been paying attention.\n"
         "Synthesize context naturally; never say 'according to source' or list sources.\n"

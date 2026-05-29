@@ -7,7 +7,8 @@
   import MusicTopArtists     from '../lib/panels/MusicTopArtists.svelte';
   import MusicHeatmap        from '../lib/panels/MusicHeatmap.svelte';
   import MusicPlaysChart     from '../lib/panels/MusicPlaysChart.svelte';
-  import MusicPlaylists      from '../lib/panels/MusicPlaylists.svelte';
+  import MusicPlaylists       from '../lib/panels/MusicPlaylists.svelte';
+  import MusicArchaeologist  from '../lib/panels/MusicArchaeologist.svelte';
 
   let nowPlaying = null;
   let lastCover = null;
@@ -157,7 +158,7 @@
   <!-- Bento grid -->
   <div class="grid gap-4" style="
     grid-template-columns: repeat(10, 1fr);
-    grid-template-rows: 130px 750px 380px 420px;
+    grid-template-rows: 130px 750px 380px 420px 270px;
   ">
     <!-- Streak: 70% width, row 1 -->
     <div style="grid-column:1/8; grid-row:1">
@@ -192,6 +193,11 @@
     <!-- Playlists: full width, row 4 -->
     <div style="grid-column:1/11; grid-row:4">
       <MusicPlaylists />
+    </div>
+
+    <!-- Playlist Archaeologist: full width, row 5 -->
+    <div style="grid-column:1/11; grid-row:5">
+      <MusicArchaeologist />
     </div>
   </div>
 </main>
